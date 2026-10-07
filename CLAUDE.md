@@ -6,7 +6,7 @@ You are working on **Forge Frenzy**, a Roblox incremental blacksmithing simulato
 
 Build a fun, complete, playable, visually polished *blacksmithing-first* incremental experience. Automatic machines supply selectable materials; players actively forge chosen weapon types through a click-speed/luck minigame; randomized quality/rarity/design/traits create valuable collectible weapons; money improves production/gear/pets; evolution and social leaderboards provide long-term goals. Scope must remain narrow with deep progression; do not turn this into a combat RPG or a large engineering framework.
 
-Read [README.md](README.md), then [docs/01_VISION_AND_CORE_LOOP.md](docs/01_VISION_AND_CORE_LOOP.md) through [docs/12_ECONOMY_AND_BALANCE.md), especially [docs/11_DECISIONS_AND_OPEN_QUESTIONS.md](docs/11_DECISIONS_AND_OPEN_QUESTIONS.md). The last linked reference is [docs/12_ECONOMY_AND_BALANCE.md](docs/12_ECONOMY_AND_BALANCE.md).
+Read [README.md](README.md), then the design documents in `docs/`, starting with [vision and core loop](docs/01_VISION_AND_CORE_LOOP.md), including the [decision log](docs/11_DECISIONS_AND_OPEN_QUESTIONS.md) and [balance plan](docs/12_ECONOMY_AND_BALANCE.md).
 
 ## Autonomy and tasking
 
