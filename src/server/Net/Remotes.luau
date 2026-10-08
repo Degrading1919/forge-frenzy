@@ -205,6 +205,9 @@ local FRIENDLY = {
 	NotOwned = "You don't own that yet", NotEnoughCoins = "Not enough coins", MaxTier = "Already at the highest tier",
 	MaxLevel = "Already maxed", Locked = "That material isn't unlocked yet", NothingPending = "Nothing to collect",
 	InvalidMaterial = "Pick a material", InvalidClass = "Pick a weapon type",
+	MaterialLocked = "Unlock that material at the extractor first", ["egg locked"] = "Unlock a higher material tier to open this egg",
+	["not enough coins"] = "Not enough coins", ["inventory full"] = "Companion inventory full",
+	["multi-hatch not owned"] = "Multi-Hatch pass required", ["not eligible"] = "Not eligible to evolve yet",
 }
 local function call(serviceName: string, fnName: string, ...: any): (boolean, any)
 	local s = svc(serviceName)
@@ -458,6 +461,40 @@ function Remotes.init()
 		local ok, res = handler(player, ...)
 		Remotes.markDirty(player)
 		return ok, res
+	end
+
+	if RunService:IsStudio() then
+		-- Studio-only test bridge so MCP/command-bar scripts can drive real profiles (never exists live).
+		local ServerStorage = game:GetService("ServerStorage")
+		local old = ServerStorage:FindFirstChild("DevBridge")
+		if old then
+			old:Destroy()
+		end
+		local bridge = Instance.new("BindableFunction")
+		bridge.Name = "DevBridge"
+		bridge.OnInvoke = function(cmd: string, userId: number?, ...: any)
+			local player = userId and Players:GetPlayerByUserId(userId) or Players:GetPlayers()[1]
+			local Data = svc("DataService")
+			local p = player and Data and Data.get(player)
+			if not p then
+				return nil
+			end
+			local args = { ... }
+			if cmd == "profile" then
+				return p
+			elseif cmd == "set" then
+				p[args[1]] = args[2]
+			elseif cmd == "add" then
+				p[args[1]] = (p[args[1]] or 0) + args[2]
+			elseif cmd == "ingots" then
+				p.ingots[args[1]] = args[2]
+			elseif cmd == "snapshot" then
+				return Remotes.snapshot(player)
+			end
+			Data.markDirty(player)
+			return true
+		end
+		bridge.Parent = ServerStorage
 	end
 
 	strikeEvent.OnServerEvent:Connect(function(player: Player, sessionId: any)
