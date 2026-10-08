@@ -72,3 +72,12 @@ For implementation preparation, [docs/13_PLAYTEST_BALANCE_V0.md](13_PLAYTEST_BAL
 **Newly identified potential conflict:** paid protected evolution preserves machine tier; eligibility must require a genuinely fresh progression milestone rather than testing currently held extractor tier. The prototype doc prescribes a fresh-tier-equivalent milestone for protected evolution, to prevent infinite chaining. Do not ship a protection product before this is implemented and verified.
 
 **Current launch blockers:** Roblox Studio MCP access and authoritative place structure not verified; exact product IDs/prices and entitlement approval outstanding; live paid-random disclosure/eligibility review; real art imports; economy simulation and human first-hour playtest.
+
+
+## October 7 owner playtest superseding decisions
+
+The first full owner playtest produced [docs/21_OWNER_PLAYTEST_REMEDIATION.md](21_OWNER_PLAYTEST_REMEDIATION.md). Where that document conflicts with earlier design assumptions, **the owner playtest wins**.
+
+Notable newly approved direction includes: station-local interaction instead of remote management menus; a Roblox-styled high-energy UI overhaul; weapon-size-dependent ingot recipes; a compact map and faster movement; physical build pads and workshop expansion; a central sell booth; pet merging; passive-income display weapons; stealing from other players' podiums; a 30-second laser-based forge lock; and a major economy rebuild targeting roughly **500 hours of free automated play to reach the final material** while making the opening session faster and more rewarding.
+
+Earlier statements such as "no stealing at launch" and the prior several-hour tier-32 progression target are superseded.
