@@ -33,6 +33,7 @@ Build a blacksmithing empire without turning the game into a sprawling RPG. Work
 | [Claude Desktop build mission](docs/14_CLAUDE_BUILD_MISSION.md) | Ready-to-paste autonomous orchestrator prompt |
 | [Tripo asset manifest](docs/15_TRIPO_ASSET_MANIFEST.md) | Every externally generated 3D asset: priority, reuse, triangle budget and Tripo prompt ([JSON](design/tripo-asset-manifest.json)) |
 | [Machine-readable v0 balance](design/balance-v0.json) | Prototype configurations and explicit material prices |
+| [Owner playtest remediation](docs/21_OWNER_PLAYTEST_REMEDIATION.md) | Highest-priority owner findings for UX, world, stealing/buildout systems and the 500-hour progression redesign |
 | [Code layout and contracts](docs/16_CODE_LAYOUT_AND_CONTRACTS.md) | Source/Studio mapping and service interfaces |
 | [Core economy implementation](docs/17_CORE_ECONOMY_IMPLEMENTATION.md) | Economy and forging API notes from the initial implementation |
 | [Client snapshot](docs/18_CLIENT_SNAPSHOT.md) | Server-owned profile replication contract |
