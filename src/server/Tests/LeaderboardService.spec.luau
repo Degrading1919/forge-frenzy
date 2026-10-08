@@ -14,12 +14,14 @@ local forged = Logic.Metrics[2]
 local function fakeStore(log: { any }, fail: boolean?)
 	local data = {}
 	return {
-		SetAsync = function(_, key, value)
+		UpdateAsync = function(_, key, transform)
 			if fail then
 				error("403 StudioAccessToApisNotAllowed")
 			end
+			local value = transform(data[key])
 			data[key] = value
 			table.insert(log, { key = key, value = value })
+			return value
 		end,
 		GetSortedAsync = function(_, ascending, size)
 			local rows = {}
@@ -132,33 +134,93 @@ tests["guest or unloaded players are skipped"] = function()
 	assert(#log == 0)
 end
 
-tests["store failures disable global boards without erroring"] = function()
+tests["transient store failures retry and recover"] = function()
 	local Service = fresh()
 	local log = {}
+	local fail, now = true, 0
+	local backing = fakeStore(log)
 	Service._inject({
 		getProfile = function()
 			return { weaponsForged = 3 }
 		end,
 		getStore = function()
-			return fakeStore(log, true)
+			if fail then error("temporarily throttled") end
+			return backing
 		end,
+		clock = function() return now end,
 	})
 	Service.flush({ UserId = 7 }, true)
-	assert(not Service.isGlobalEnabled())
+	assert(Service.isGlobalEnabled(), "a transient outage must not permanently disable boards")
 	Service.refresh("forged")
 	assert(#Service.getTop("forged") == 0)
+	fail, now = false, 10
+	assert(Service.flush({UserId = 7}))
+	Service.refresh("forged")
+	assert(#log == 1 and Service.getTop("forged")[1].value == 3)
+end
 
-	local NoApi = fresh()
-	NoApi._inject({
-		getProfile = function()
-			return { weaponsForged = 3 }
-		end,
-		getStore = function()
-			error("You must publish this place to the web to access DataStore.")
-		end,
-	})
-	NoApi.flush({ UserId = 7 }, true)
-	assert(not NoApi.isGlobalEnabled())
+tests["stale servers cannot lower existing global records"] = function()
+	local service, log = fresh(), {}
+	local store = fakeStore(log)
+	local value = 100
+	service._inject({ getProfile = function() return {weaponsForged = value} end,
+		getStore = function() return store end })
+	service.flush({UserId = 9}, true)
+	value = 12
+	service.flush({UserId = 9}, true)
+	service.refresh("forged")
+	assert(service.getTop("forged")[1].value == 100)
+end
+
+tests["departure snapshot survives profile removal and retries"] = function()
+	local service, log, fail, now = fresh(), {}, true, 0
+	local store = fakeStore(log)
+	service._inject({ getProfile = function() return nil end,
+		getStore = function() if fail then error("temporary") end; return store end,
+		clock = function() return now end })
+	local data = {weaponsForged = 123}
+	service.queueDeparture({UserId = 42}, data)
+	data.weaponsForged = 0
+	service.flushPending(true)
+	assert(#log == 0)
+	fail, now = false, 10
+	service.flushPending()
+	service.flushPending(true)
+	assert(#log == 1 and log[1].value == 123)
+end
+
+tests["departure retry persists a recent changed metric before clearing queue"] = function()
+	local service, log, now, fail = fresh(), {}, 0, false
+	local store = fakeStore(log)
+	local update = store.UpdateAsync
+	function store:UpdateAsync(key, transform)
+		if fail then error("temporary departure write failure") end
+		return update(self, key, transform)
+	end
+	local player, data = {UserId = 42}, {weaponsForged = 100}
+	service._inject({ getProfile = function() return data end,
+		getStore = function() return store end, clock = function() return now end })
+	assert(service.flush(player))
+	data.weaponsForged, now, fail = 101, 30, true
+	service.queueDeparture(player, data)
+	service.flushPending(true)
+	assert(#log == 1)
+	now, fail = 40, false
+	service.flushPending()
+	service.flushPending()
+	assert(#log == 2 and log[2].value == 101)
+end
+
+tests["mock mode never accesses ordered stores"] = function()
+	local service, opened = fresh(), false
+	service._inject({ getProfile = function() return {weaponsForged = 3} end,
+		getStore = function() opened = true; return {} end,
+		globalAvailable = function() return false end })
+	service.flush({UserId = 42}, true)
+	service.refresh("forged")
+	service.queueDeparture({UserId = 42}, {weaponsForged = 3})
+	service.flushPending(true)
+	assert(not opened and not service.isGlobalEnabled())
 end
 
 tests["refresh caches decoded top lists with names"] = function()

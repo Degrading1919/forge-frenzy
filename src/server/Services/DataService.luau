@@ -1,218 +1,248 @@
 --!strict
---[[
-	DataService — session-locked player profiles (ProfileStore 1.0.3, Apache-2.0, vendored in
-	src/server/Packages).
-
-	get(player) / waitFor(player) return the live profile data table (see Economy.Profile).
-	Other services mutate it synchronously and then call markDirty(player), which fires
-	profileChanged(player, data) for replication. ProfileStore saves every 300 s, on leave and
-	on shutdown. In Studio without API access ProfileStore switches to its mock store on its
-	own; if the package cannot load at all, profiles fall back to in-memory tables so play
-	testing never errors.
-
-	Profile fields owned by the core economy are created by Economy.newProfile(). Other threads
-	add their own fields by registering defaults with DataService.registerDefaults() during their
-	init(); defaults are filled into every loaded profile without overwriting saved values.
-]]
-
+-- Session-locked saves. Studio NEVER writes production keys; missing storage fails closed.
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local Economy = require(Shared:WaitForChild("Economy"))
-
+local Economy = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Economy"))
 local DataService = {}
-
--- Bump only with a migration; changing it starts every player on a fresh store.
 DataService.STORE_NAME = "ForgeFrenzy_Player_v1"
+DataService.STUDIO_SUFFIX = "_StudioPlaytest"
 DataService.KEY_PREFIX = "Player_"
-
-DataService.profileChanged = Instance.new("BindableEvent") -- (player, data)
-DataService.profileLoaded = Instance.new("BindableEvent") -- (player, data)
-
-type Session = { data: Economy.Profile, profile: any? }
-
-local sessions: { [Player]: Session } = {}
-local loading: { [Player]: boolean } = {}
-local extraDefaults: { [string]: any } = {}
+DataService.profileChanged = Instance.new("BindableEvent")
+DataService.profileLoaded = Instance.new("BindableEvent")
+local sessions: {[any]: any} = {}
+local loading: {[any]: boolean} = {}
+local extraDefaults, releaseHooks = {}, {}
 local store: any = nil
-
+local initialized, started, closing = false, false, false
+local mode, storeName, apiState = "Unavailable", DataService.STORE_NAME, "NotReady"
+local deps: any = {
+	clock = os.clock, now = os.time, wait = task.wait,
+	isStudio = function() return game:GetService("RunService"):IsStudio() end,
+	forceMock = function() return game:GetAttribute("ForgeFrenzyForceMock") == true end,
+	setGameAttribute = function(key, value) game:SetAttribute(key, value) end,
+	setPlayerAttribute = function(player, key, value) player:SetAttribute(key, value) end,
+	settleOffline = function(player)
+		require(script.Parent:WaitForChild("ProductionService")).settleOffline(player)
+	end,
+	getLibrary = function()
+		return require(script.Parent.Parent:WaitForChild("Packages"):WaitForChild("ProfileStore", 10))
+	end,
+}
 local function deepCopy(value: any): any
-	if type(value) ~= "table" then
-		return value
-	end
+	if type(value) ~= "table" then return value end
 	local out = {}
-	for k, v in value do
-		out[k] = deepCopy(v)
-	end
+	for key, child in value do out[key] = deepCopy(child) end
 	return out
 end
-
-local function applyDefaults(data: Economy.Profile)
+local function playerStatus(player: any, state: string)
+	local session = sessions[player]
+	if session then session.saveState = state end
+	pcall(deps.setPlayerAttribute, player, "FFSaveState", state)
+end
+local function applyDefaults(data: any)
 	Economy.reconcile(data)
 	for key, value in extraDefaults do
-		if data[key] == nil then
-			data[key] = deepCopy(value)
+		if data[key] == nil then data[key] = deepCopy(value) end
+	end
+end
+function DataService.registerDefaults(defaults: {[string]: any})
+	for key, value in defaults do extraDefaults[key] = deepCopy(value) end
+	for _, session in sessions do applyDefaults(session.data) end
+end
+-- Called once before release. Hooks must capture data before yielding, and must not
+-- depend on PlayerRemoving callback order. Names sort so forge refunds precede boards.
+function DataService.registerReleaseHook(name: string, callback: (any, any, string) -> ())
+	releaseHooks[name] = callback
+end
+local function runReleaseHooks(player: any, session: any, reason: string)
+	if session.hooksCalled then return end
+	session.hooksCalled = true
+	local names = {}
+	for name in releaseHooks do table.insert(names, name) end
+	table.sort(names)
+	for _, name in names do
+		local ok, err = pcall(releaseHooks[name], player, session.data, reason)
+		if not ok then warn(`[DataService] release hook {name}: {err}`) end
+	end
+end
+function DataService.get(player: any): any?
+	local session = sessions[player]
+	if not session or session.releasing or closing then return nil end
+	if session.profile and not session.profile:IsActive() then return nil end
+	return session.data
+end
+function DataService.getStatus(player: any?): any
+	local session = if player then sessions[player] else nil
+	return { mode = mode, storeName = storeName, apiState = apiState,
+		persistent = mode == "Production" or mode == "StudioPersistent",
+		saveState = if session then (if session.releasing then "Releasing" else session.saveState or "Loaded") else "NotLoaded",
+		lastSavedAt = if session then session.lastSavedAt else nil }
+end
+function DataService.waitFor(player: any, timeoutSec: number?): any?
+	local deadline = deps.clock() + (timeoutSec or 60)
+	repeat
+		local data = DataService.get(player)
+		if data then return data end
+		if player.Parent ~= Players or closing or deps.clock() >= deadline then return nil end
+		deps.wait()
+	until false
+end
+function DataService.markDirty(player: any)
+	local data = DataService.get(player)
+	if data then DataService.profileChanged:Fire(player, data) end
+end
+-- Profile:Save starts an asynchronous job; confirm its saved revision before success.
+function DataService.saveNow(player: any, timeoutSec: number?, predicate: ((any) -> boolean)?): boolean
+	local session = sessions[player]
+	if not DataService.get(player) or not session or not session.profile then return false end
+	local profile = session.profile
+	local lastSaved = profile.LastSavedData
+	local revision = math.max(tonumber(session.data._saveRevision) or 0,
+		if type(lastSaved) == "table" then tonumber(lastSaved._saveRevision) or 0 else 0) + 1
+	session.data._saveRevision = revision
+	playerStatus(player, "Saving")
+	if not pcall(profile.Save, profile) then playerStatus(player, "SaveDelayed"); return false end
+	local deadline = deps.clock() + (timeoutSec or 15)
+	repeat
+		if not profile:IsActive() then break end
+		local saved = profile.LastSavedData
+		if type(saved) == "table" and (tonumber(saved._saveRevision) or 0) >= revision
+			and (not predicate or predicate(saved)) then
+			playerStatus(player, "Saved")
+			return true
 		end
-	end
-end
-
--- Registers default values for profile fields another service owns ({ pets = {}, ... }).
-function DataService.registerDefaults(defaults: { [string]: any })
-	for key, value in defaults do
-		extraDefaults[key] = deepCopy(value)
-	end
-	for _, session in sessions do
-		applyDefaults(session.data)
-	end
-end
-
-function DataService.get(player: Player): Economy.Profile?
-	local session = sessions[player]
-	return if session then session.data else nil
-end
-
--- Yields until the player's profile is loaded; nil if they leave or loading gives up.
-function DataService.waitFor(player: Player, timeoutSec: number?): Economy.Profile?
-	local deadline = os.clock() + (timeoutSec or 60)
-	while not sessions[player] do
-		if player.Parent ~= Players or os.clock() > deadline then
-			return nil
-		end
-		task.wait()
-	end
-	return sessions[player].data
-end
-
-function DataService.markDirty(player: Player)
-	local session = sessions[player]
-	if session then
-		DataService.profileChanged:Fire(player, session.data)
-	end
-end
-
--- Saves the player's profile now (e.g. right after a purchase receipt). No-op for in-memory profiles.
-function DataService.saveNow(player: Player): boolean
-	local session = sessions[player]
-	if session and session.profile then
-		session.profile:Save()
-		return true
-	end
+		if not profile:IsActive() or deps.clock() >= deadline then break end
+		deps.wait(0.05)
+	until false
+	playerStatus(player, "SaveDelayed")
 	return false
 end
-
--- Runs `mutate(data)` and marks the profile dirty if the player is loaded. Returns its results.
-function DataService.update(player: Player, mutate: (Economy.Profile) -> ...any): ...any
+function DataService.update(player: any, mutate: (any) -> ...any): ...any
 	local data = DataService.get(player)
-	if not data then
-		return false, "NotLoaded"
-	end
+	if not data then return false, "NotLoaded" end
 	local results = table.pack(mutate(data))
 	DataService.markDirty(player)
 	return table.unpack(results, 1, results.n)
 end
-
-local function finishLoad(player: Player, session: Session)
+local function releasePlayer(player: any, reason: string?)
+	local session = sessions[player]
+	if not session or session.releasing then return end
+	session.data.lastSeen = deps.now()
+	runReleaseHooks(player, session, reason or "Leave")
+	session.releasing = true
+	playerStatus(player, "Releasing")
+	sessions[player] = nil
+	if session.profile then session.profile:EndSession() end
+end
+local function attachProfile(player: any, profile: any)
+	profile:AddUserId(player.UserId)
+	profile:Reconcile()
+	local session: any = { data = profile.Data, profile = profile }
+	profile.OnSave:Connect(function() session.data.lastSeen = deps.now() end)
+	profile.OnLastSave:Connect(function(reason)
+		if session.loaded then runReleaseHooks(player, session, reason) end
+	end)
+	profile.OnAfterSave:Connect(function()
+		session.lastSavedAt = deps.now()
+		pcall(deps.setPlayerAttribute, player, "FFLastSavedAt", session.lastSavedAt)
+		playerStatus(player, if session.releasing then "Released" else "Saved")
+	end)
+	profile.OnSessionEnd:Connect(function()
+		if sessions[player] == session then sessions[player] = nil end
+		if not session.releasing and not closing and player.Parent == Players then
+			player:Kick("Your save session ended. Please rejoin to protect your progress.")
+		end
+	end)
+	if player.Parent ~= Players or closing or not profile:IsActive() then profile:EndSession(); return end
 	applyDefaults(session.data)
 	sessions[player] = session
-	-- Offline production is settled by ProductionService (required lazily to avoid a cycle).
-	local okProd, ProductionService = pcall(require, script.Parent:FindFirstChild("ProductionService"))
-	local production: any = if okProd then ProductionService else nil
-	if production and production.settleOffline then
-		production.settleOffline(player)
-	else
-		session.data.lastSeen = os.time()
+	local ok, err = pcall(deps.settleOffline, player)
+	if not ok then
+		error("Offline settlement failed: " .. tostring(err))
 	end
+	session.loaded = true
+	playerStatus(player, "Loaded")
 	DataService.profileLoaded:Fire(player, session.data)
 	DataService.markDirty(player)
 end
-
-local function loadPlayer(player: Player)
-	if sessions[player] or loading[player] then
-		return
-	end
+local function loadPlayer(player: any)
+	if sessions[player] or loading[player] or closing then return end
 	loading[player] = true
-	if not store then
-		finishLoad(player, { data = Economy.newProfile() })
-		loading[player] = nil
-		return
-	end
-	local profile = store:StartSessionAsync(DataService.KEY_PREFIX .. player.UserId, {
-		Cancel = function()
-			return player.Parent ~= Players
-		end,
-	})
+	playerStatus(player, "Loading")
+	local ok, profile = pcall(function()
+		if not store then error("Profile storage is unavailable") end
+		return store:StartSessionAsync(DataService.KEY_PREFIX .. player.UserId, {
+			Cancel = function() return player.Parent ~= Players or closing end,
+		})
+	end)
 	loading[player] = nil
-	if profile == nil then
-		if player.Parent == Players then
-			player:Kick("Forge Frenzy couldn't load your save. Please rejoin.")
-		end
+	if not ok or not profile then
+		playerStatus(player, "LoadFailed")
+		if not ok then warn("[DataService] load failed:", profile) end
+		if player.Parent == Players then player:Kick("Forge Frenzy couldn't load your save. Please rejoin.") end
 		return
 	end
-	profile:AddUserId(player.UserId)
-	profile:Reconcile()
-	profile.OnSessionEnd:Connect(function()
+	-- Reconciliation/offline hooks may fail on malformed legacy data. Release the
+	-- untouched loaded snapshot rather than saving a partially repaired profile.
+	local original = deepCopy(profile.Data)
+	local attached, err = pcall(attachProfile, player, profile)
+	if not attached then
+		warn("[DataService] restore failed:", err)
 		sessions[player] = nil
-		if player.Parent == Players then
-			player:Kick("Your save was opened on another server. Please rejoin.")
-		end
-	end)
-	if player.Parent ~= Players then
+		profile.Data = original
 		profile:EndSession()
-		return
-	end
-	finishLoad(player, { data = profile.Data, profile = profile })
-end
-
-local function releasePlayer(player: Player)
-	local session = sessions[player]
-	sessions[player] = nil
-	if session then
-		session.data.lastSeen = os.time()
-		if session.profile then
-			session.profile:EndSession()
-		end
+		if player.Parent == Players then player:Kick("Forge Frenzy couldn't restore your save. Please rejoin.") end
 	end
 end
-
 function DataService.init()
-	local packages = script.Parent.Parent:FindFirstChild("Packages")
-	local module = packages and packages:FindFirstChild("ProfileStore")
-	if module then
-		local ok, ProfileStore = pcall(require, module)
-		if ok then
-			local okStore, created = pcall(ProfileStore.New, DataService.STORE_NAME, Economy.newProfile())
-			if okStore then
-				store = created
-			else
-				warn("[DataService] ProfileStore.New failed, using in-memory profiles:", created)
-			end
-		else
-			warn("[DataService] ProfileStore failed to load, using in-memory profiles:", ProfileStore)
+	if initialized then return end
+	initialized = true
+	local studio = deps.isStudio()
+	storeName = DataService.STORE_NAME .. (if studio then DataService.STUDIO_SUFFIX else "")
+	local ok, result = pcall(function()
+		local library = deps.getLibrary()
+		local deadline = deps.clock() + 20
+		while library.DataStoreState == "NotReady" and deps.clock() < deadline do deps.wait(0.05) end
+		apiState = library.DataStoreState
+		if not studio and apiState ~= "Access" then error(`DataStore API is {apiState}`) end
+		if apiState == "NotReady" then error("DataStore availability check timed out") end
+		local created = library.New(storeName, Economy.newProfile())
+		if studio and (apiState ~= "Access" or deps.forceMock()) then
+			mode = "StudioMock"
+			return created.Mock
 		end
-	else
-		warn("[DataService] Packages.ProfileStore missing, using in-memory profiles")
-	end
-end
-
-function DataService.start()
-	Players.PlayerAdded:Connect(function(player)
-		task.spawn(loadPlayer, player)
+		mode = if studio then "StudioPersistent" else "Production"
+		return created
 	end)
-	Players.PlayerRemoving:Connect(releasePlayer)
-	for _, player in Players:GetPlayers() do
-		task.spawn(loadPlayer, player)
-	end
+	if ok then store = result else mode = "Unavailable"; warn("[DataService] storage unavailable:", result) end
+	deps.setGameAttribute("ForgeFrenzyDataMode", mode)
+	deps.setGameAttribute("ForgeFrenzyDataStore", storeName)
+	deps.setGameAttribute("ForgeFrenzyDataPersistent", mode == "Production" or mode == "StudioPersistent")
+	print(`[DataService] {mode}; store={storeName}; API={apiState}`)
 end
-
--- Test hook: installs an in-memory profile for a player-like object (no DataStore involved).
-function DataService._setForTest(player: any, data: Economy.Profile?)
-	if data then
-		applyDefaults(data)
-		sessions[player] = { data = data }
-	else
-		sessions[player] = nil
-	end
+function DataService.start()
+	if started then return end
+	started = true
+	Players.PlayerAdded:Connect(function(player) task.spawn(loadPlayer, player) end)
+	Players.PlayerRemoving:Connect(function(player) releasePlayer(player, "Leave") end)
+	-- ProfileStore owns the shutdown wait for final saves. OnLastSave runs hooks even
+	-- if its BindToClose callback wins the race with this callback.
+	game:BindToClose(DataService.prepareShutdown)
+	for _, player in Players:GetPlayers() do task.spawn(loadPlayer, player) end
 end
-
+-- Leaderboard shutdown uses the same preparation before draining its departure queue.
+function DataService.prepareShutdown()
+	for player in sessions do releasePlayer(player, "Shutdown") end
+	closing = true
+end
+-- Controlled injection for isolated specs. These hooks never select live data stores.
+function DataService._inject(overrides: any)
+	for key, value in overrides do deps[key] = value end
+end
+function DataService._setForTest(player: any, data: any?, profile: any?)
+	if data then applyDefaults(data); sessions[player] = { data = data, profile = profile }
+	else sessions[player] = nil end
+end
+DataService._loadForTest = loadPlayer
+DataService._releaseForTest = releasePlayer
+DataService._attachForTest = attachProfile
 return DataService

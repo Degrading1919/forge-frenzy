@@ -15,8 +15,9 @@
 	stored as round(log10(v + 1) * 1e12), which keeps ordering and decodes to within display
 	precision. Count metrics are stored as-is.
 
-	Every DataStore call is pcall-wrapped; the first failure (e.g. Studio without API access)
-	disables global boards for the session instead of erroring. getServerTop() always works.
+	Transient failures back off per metric and retry; monotonic UpdateAsync prevents an old
+	server from lowering a record. Studio uses separate ordered stores. Mock sessions use
+	server boards only. Departure snapshots come from DataService, avoiding callback races.
 ]]
 
 local LeaderboardService = {}
@@ -44,13 +45,13 @@ for _, metric in Logic.Metrics do
 end
 
 function Logic.encode(metric: Metric, value: number): number
-	if type(value) ~= "number" or value ~= value or value <= 0 then
+	if type(value) ~= "number" or value ~= value or value == math.huge or value <= 0 then
 		return 0
 	end
 	if metric.logEncoded then
 		return math.floor(math.log10(value + 1) * LOG_SCALE + 0.5)
 	end
-	return math.floor(value)
+	return math.min(math.floor(value), 2 ^ 53 - 1)
 end
 
 function Logic.decode(metric: Metric, stored: number): number
@@ -62,7 +63,7 @@ end
 
 function Logic.readValue(profile: any, metric: Metric): number
 	local value = profile[metric.field]
-	if type(value) ~= "number" or value ~= value then
+	if type(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
 		return 0
 	end
 	return value
@@ -73,7 +74,7 @@ end
 	state = { lastWritten: number?, lastAt: number? }; returns true when a write is due.
 ]]
 function Logic.shouldWrite(state: any, encoded: number, now: number, force: boolean?): boolean
-	if encoded <= 0 or encoded == state.lastWritten then
+	if encoded <= 0 or (state.lastWritten and encoded <= state.lastWritten) then
 		return false
 	end
 	if force then
@@ -113,6 +114,9 @@ local deps: { [string]: any } = {
 		return "Blacksmith " .. userId
 	end,
 	clock = os.clock,
+	storeSuffix = "",
+	globalAvailable = function() return true end,
+	prepareShutdown = function() end,
 }
 
 local enabled = true
@@ -120,6 +124,9 @@ local stores: { [string]: any } = {}
 local writeState: { [any]: { [string]: any } } = setmetatable({}, { __mode = "k" }) :: any
 local topCache: { [string]: { any } } = {}
 local nameCache: { [number]: string } = {}
+local failures: { [string]: any } = {}
+local pending: { [number]: any } = {}
+local stopping = false
 
 local function dataOf(player: any): any
 	local profile = deps.getProfile(player)
@@ -129,22 +136,25 @@ local function dataOf(player: any): any
 	return if type(profile.Data) == "table" then profile.Data else profile
 end
 
-local function disable(err: any)
-	if enabled then
-		enabled = false
-		warn(`[Leaderboard] global boards disabled for this session: {err}`)
-	end
+local function failed(metric: Metric, err: any)
+	local state = failures[metric.key] or { count = 0 }
+	state.count += 1
+	state.retryAt = deps.clock() + math.min(120, 5 * 2 ^ math.min(5, state.count - 1))
+	failures[metric.key] = state
+	if state.count == 1 then warn(`[Leaderboard] {metric.key} temporarily unavailable; retrying: {err}`) end
 end
 
-local function storeFor(metric: Metric): any
-	if not enabled or deps.getStore == nil then
+local function storeFor(metric: Metric, force: boolean?): any
+	if not enabled or not deps.globalAvailable() or deps.getStore == nil then
 		return nil
 	end
+	local failure = failures[metric.key]
+	if failure and not force and deps.clock() < failure.retryAt then return nil end
 	local store = stores[metric.key]
 	if store == nil then
-		local ok, result = pcall(deps.getStore, `FF_{metric.key}_{STORE_VERSION}`)
+		local ok, result = pcall(deps.getStore, `FF_{metric.key}_{STORE_VERSION}{deps.storeSuffix}`)
 		if not ok then
-			disable(result)
+			failed(metric, result)
 			return nil
 		end
 		store = result
@@ -154,10 +164,10 @@ local function storeFor(metric: Metric): any
 end
 
 -- Write any due metrics for one player. `force` is used on leave/shutdown.
-function LeaderboardService.flush(player: any, force: boolean?)
-	local profile = dataOf(player)
+function LeaderboardService.flush(player: any, force: boolean?, snapshot: any?): boolean
+	local profile = snapshot or dataOf(player)
 	if profile == nil or type(player.UserId) ~= "number" or player.UserId <= 0 then
-		return
+		return true
 	end
 	local now = deps.clock()
 	local states = writeState[player]
@@ -165,23 +175,54 @@ function LeaderboardService.flush(player: any, force: boolean?)
 		states = {}
 		writeState[player] = states
 	end
+	local successful = true
 	for _, metric in Logic.Metrics do
 		local state = states[metric.key] or {}
 		states[metric.key] = state
 		local encoded = Logic.encode(metric, Logic.readValue(profile, metric))
-		if Logic.shouldWrite(state, encoded, now, force) then
-			local store = storeFor(metric)
+		-- A departure snapshot must remain queued until its final value is written.
+		-- Bypass the periodic interval on retries, while storeFor still honors backoff.
+		if Logic.shouldWrite(state, encoded, now, force or snapshot ~= nil) then
+			if state.inFlight then successful = false; continue end
+			local store = storeFor(metric, force)
 			if store == nil then
-				return
+				successful = false
+				continue
 			end
-			local ok, err = pcall(store.SetAsync, store, tostring(player.UserId), encoded)
+			state.inFlight = true
+			local ok, result = pcall(store.UpdateAsync, store, tostring(player.UserId), function(old)
+				return math.max(if type(old) == "number" then old else 0, encoded)
+			end)
+			state.inFlight = false
 			if ok then
-				state.lastWritten = encoded
+				state.lastWritten = if type(result) == "number" then result else encoded
 				state.lastAt = now
+				failures[metric.key] = nil
 			else
-				disable(err)
-				return
+				failed(metric, result)
+				successful = false
 			end
+		end
+	end
+	return successful
+end
+
+-- Capture before the profile disappears; no datastore call/yield in the release hook.
+function LeaderboardService.queueDeparture(player: any, profile: any)
+	if type(player.UserId) ~= "number" or player.UserId <= 0 or not deps.globalAvailable() then return end
+	local snapshot = {}
+	local prior = pending[player.UserId]
+	for _, metric in Logic.Metrics do
+		snapshot[metric.field] = math.max(Logic.readValue(profile, metric),
+			if prior then Logic.readValue(prior.profile, metric) else 0)
+	end
+	pending[player.UserId] = { player = player, profile = snapshot }
+end
+
+function LeaderboardService.flushPending(force: boolean?)
+	for userId, entry in pending do
+		if LeaderboardService.flush(entry.player, force, entry.profile) and pending[userId] == entry then
+			pending[userId] = nil
 		end
 	end
 end
@@ -205,11 +246,12 @@ function LeaderboardService.refresh(metricKey: string)
 	end
 	local ok, pages = pcall(store.GetSortedAsync, store, false, TOP_SIZE)
 	if not ok then
-		disable(pages)
+		failed(metric, pages)
 		return
 	end
 	local okPage, page = pcall(pages.GetCurrentPage, pages)
 	if not okPage then
+		failed(metric, page)
 		return
 	end
 	local list = {}
@@ -220,6 +262,7 @@ function LeaderboardService.refresh(metricKey: string)
 		end
 	end
 	topCache[metricKey] = list
+	failures[metricKey] = nil
 end
 
 -- Cached global top list: { { userId, name, value } }. Empty when boards are disabled.
@@ -249,7 +292,7 @@ function LeaderboardService.getServerTop(metricKey: string, n: number?): { any }
 end
 
 function LeaderboardService.isGlobalEnabled(): boolean
-	return enabled
+	return enabled and deps.globalAvailable()
 end
 
 function LeaderboardService._inject(overrides: { [string]: any })
@@ -261,6 +304,8 @@ function LeaderboardService._inject(overrides: { [string]: any })
 	table.clear(writeState)
 	table.clear(topCache)
 	table.clear(nameCache)
+	table.clear(failures)
+	table.clear(pending)
 end
 
 function LeaderboardService.init()
@@ -276,6 +321,13 @@ function LeaderboardService.init()
 	deps.getStore = function(name)
 		return DataStoreService:GetOrderedDataStore(name)
 	end
+	deps.storeSuffix = if game:GetService("RunService"):IsStudio() then DataService.STUDIO_SUFFIX else ""
+	deps.globalAvailable = function() return DataService.getStatus().persistent end
+	deps.prepareShutdown = DataService.prepareShutdown
+	DataService.registerReleaseHook("Leaderboard", function(player, data)
+		LeaderboardService.queueDeparture(player, data)
+		task.defer(LeaderboardService.flushPending, true)
+	end)
 	deps.nameFor = function(userId)
 		return Players:GetNameFromUserIdAsync(userId)
 	end
@@ -283,16 +335,28 @@ end
 
 function LeaderboardService.start()
 	local Players = game:GetService("Players")
-	Players.PlayerRemoving:Connect(function(player)
-		LeaderboardService.flush(player, true)
-	end)
 	game:BindToClose(function()
+		stopping = true
+		deps.prepareShutdown()
 		for _, player in Players:GetPlayers() do
-			LeaderboardService.flush(player, true)
+			local data = dataOf(player)
+			if data then LeaderboardService.queueDeparture(player, data) end
+		end
+		local deadline = deps.clock() + 25
+		repeat
+			LeaderboardService.flushPending(true)
+			if next(pending) == nil then break end
+			task.wait(1)
+		until deps.clock() >= deadline
+	end)
+	task.spawn(function()
+		while not stopping do
+			LeaderboardService.flushPending(false)
+			task.wait(5)
 		end
 	end)
 	task.spawn(function()
-		while true do
+		while not stopping do
 			for _, player in Players:GetPlayers() do
 				LeaderboardService.flush(player, false)
 			end
