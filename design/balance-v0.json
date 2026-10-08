@@ -1,0 +1,470 @@
+{
+  "status": "PROPOSED_FOR_PROTOTYPE_NOT_FINAL",
+  "version": "0.1.0",
+  "designedAt": "2026-10-07",
+  "currency": "Coins",
+  "materials": [
+    {
+      "id": "copper",
+      "name": "Copper",
+      "index": 1,
+      "era": 1,
+      "priceMin": 12,
+      "priceMax": 216,
+      "extractorUnlockCoinCost": 0
+    },
+    {
+      "id": "tin",
+      "name": "Tin",
+      "index": 2,
+      "era": 1,
+      "priceMin": 21,
+      "priceMax": 378,
+      "extractorUnlockCoinCost": 414
+    },
+    {
+      "id": "bronze",
+      "name": "Bronze",
+      "index": 3,
+      "era": 1,
+      "priceMin": 38,
+      "priceMax": 684,
+      "extractorUnlockCoinCost": 870
+    },
+    {
+      "id": "iron",
+      "name": "Iron",
+      "index": 4,
+      "era": 1,
+      "priceMin": 68,
+      "priceMax": 1224,
+      "extractorUnlockCoinCost": 1836
+    },
+    {
+      "id": "steel",
+      "name": "Steel",
+      "index": 5,
+      "era": 2,
+      "priceMin": 120,
+      "priceMax": 2160,
+      "extractorUnlockCoinCost": 3754
+    },
+    {
+      "id": "silver",
+      "name": "Silver",
+      "index": 6,
+      "era": 2,
+      "priceMin": 214,
+      "priceMax": 3852,
+      "extractorUnlockCoinCost": 7451
+    },
+    {
+      "id": "gold",
+      "name": "Gold",
+      "index": 7,
+      "era": 2,
+      "priceMin": 382,
+      "priceMax": 6876,
+      "extractorUnlockCoinCost": 14764
+    },
+    {
+      "id": "platinum",
+      "name": "Platinum",
+      "index": 8,
+      "era": 2,
+      "priceMin": 679,
+      "priceMax": 12222,
+      "extractorUnlockCoinCost": 28990
+    },
+    {
+      "id": "cobalt",
+      "name": "Cobalt",
+      "index": 9,
+      "era": 3,
+      "priceMin": 1209,
+      "priceMax": 21762,
+      "extractorUnlockCoinCost": 56213
+    },
+    {
+      "id": "titanium",
+      "name": "Titanium",
+      "index": 10,
+      "era": 3,
+      "priceMin": 2153,
+      "priceMax": 38754,
+      "extractorUnlockCoinCost": 108432
+    },
+    {
+      "id": "tungsten",
+      "name": "Tungsten",
+      "index": 11,
+      "era": 3,
+      "priceMin": 3832,
+      "priceMax": 68976,
+      "extractorUnlockCoinCost": 207949
+    },
+    {
+      "id": "osmium",
+      "name": "Osmium",
+      "index": 12,
+      "era": 3,
+      "priceMin": 6820,
+      "priceMax": 122760,
+      "extractorUnlockCoinCost": 396554
+    },
+    {
+      "id": "moonsteel",
+      "name": "Moonsteel",
+      "index": 13,
+      "era": 4,
+      "priceMin": 12140,
+      "priceMax": 218520,
+      "extractorUnlockCoinCost": 752817
+    },
+    {
+      "id": "mithril",
+      "name": "Mithril",
+      "index": 14,
+      "era": 4,
+      "priceMin": 21609,
+      "priceMax": 388962,
+      "extractorUnlockCoinCost": 1423811
+    },
+    {
+      "id": "runite",
+      "name": "Runite",
+      "index": 15,
+      "era": 4,
+      "priceMin": 38465,
+      "priceMax": 692370,
+      "extractorUnlockCoinCost": 2683440
+    },
+    {
+      "id": "adamantite",
+      "name": "Adamantite",
+      "index": 16,
+      "era": 4,
+      "priceMin": 68467,
+      "priceMax": 1232406,
+      "extractorUnlockCoinCost": 5042013
+    },
+    {
+      "id": "emberite",
+      "name": "Emberite",
+      "index": 17,
+      "era": 5,
+      "priceMin": 121871,
+      "priceMax": 2193678,
+      "extractorUnlockCoinCost": 9447043
+    },
+    {
+      "id": "frostsilver",
+      "name": "Frostsilver",
+      "index": 18,
+      "era": 5,
+      "priceMin": 216931,
+      "priceMax": 3904758,
+      "extractorUnlockCoinCost": 17656485
+    },
+    {
+      "id": "stormium",
+      "name": "Stormium",
+      "index": 19,
+      "era": 5,
+      "priceMin": 386137,
+      "priceMax": 6950466,
+      "extractorUnlockCoinCost": 32925235
+    },
+    {
+      "id": "obsidian",
+      "name": "Obsidian",
+      "index": 20,
+      "era": 5,
+      "priceMin": 687324,
+      "priceMax": 12371832,
+      "extractorUnlockCoinCost": 61270839
+    },
+    {
+      "id": "bloodiron",
+      "name": "Bloodiron",
+      "index": 21,
+      "era": 6,
+      "priceMin": 1223436,
+      "priceMax": 22021848,
+      "extractorUnlockCoinCost": 113803947
+    },
+    {
+      "id": "soulsteel",
+      "name": "Soulsteel",
+      "index": 22,
+      "era": 6,
+      "priceMin": 2177716,
+      "priceMax": 39198888,
+      "extractorUnlockCoinCost": 211011360
+    },
+    {
+      "id": "starsteel",
+      "name": "Starsteel",
+      "index": 23,
+      "era": 6,
+      "priceMin": 3876335,
+      "priceMax": 69774030,
+      "extractorUnlockCoinCost": 390624215
+    },
+    {
+      "id": "voidmetal",
+      "name": "Voidmetal",
+      "index": 24,
+      "era": 6,
+      "priceMin": 6899876,
+      "priceMax": 124197768,
+      "extractorUnlockCoinCost": 722053933
+    },
+    {
+      "id": "sunmetal",
+      "name": "Sunmetal",
+      "index": 25,
+      "era": 7,
+      "priceMin": 12281780,
+      "priceMax": 221072040,
+      "extractorUnlockCoinCost": 1332858017
+    },
+    {
+      "id": "lunarite",
+      "name": "Lunarite",
+      "index": 26,
+      "era": 7,
+      "priceMin": 21861568,
+      "priceMax": 393508224,
+      "extractorUnlockCoinCost": 2457219103
+    },
+    {
+      "id": "astralite",
+      "name": "Astralite",
+      "index": 27,
+      "era": 7,
+      "priceMin": 38913591,
+      "priceMax": 700444638,
+      "extractorUnlockCoinCost": 4524672333
+    },
+    {
+      "id": "etherium",
+      "name": "Etherium",
+      "index": 28,
+      "era": 7,
+      "priceMin": 69266191,
+      "priceMax": 1246791438,
+      "extractorUnlockCoinCost": 8322380636
+    },
+    {
+      "id": "chronosteel",
+      "name": "Chronosteel",
+      "index": 29,
+      "era": 8,
+      "priceMin": 123293821,
+      "priceMax": 2219288778,
+      "extractorUnlockCoinCost": 15291703042
+    },
+    {
+      "id": "nebulium",
+      "name": "Nebulium",
+      "index": 30,
+      "era": 8,
+      "priceMin": 219463001,
+      "priceMax": 3950334018,
+      "extractorUnlockCoinCost": 28069832629
+    },
+    {
+      "id": "aetherglass",
+      "name": "Aetherglass",
+      "index": 31,
+      "era": 8,
+      "priceMin": 390644141,
+      "priceMax": 7031594538,
+      "extractorUnlockCoinCost": 51478371750
+    },
+    {
+      "id": "primordium",
+      "name": "Primordium",
+      "index": 32,
+      "era": 8,
+      "priceMin": 695346571,
+      "priceMax": 12516238278,
+      "extractorUnlockCoinCost": 94326545693
+    }
+  ],
+  "weaponClasses": [
+    "Sword",
+    "Greatsword",
+    "Axe",
+    "Dagger",
+    "Hammer"
+  ],
+  "forge": {
+    "manual": {
+      "strikeWindowSec": 6,
+      "baseLuck": 1,
+      "luckPerCps": 0.3,
+      "maxLuck": 5,
+      "inputRateGuardCps": 20
+    },
+    "auto": {
+      "freeLuck": 1.5,
+      "premiumLuck": 4
+    },
+    "timing": {
+      "baseHeatSec": 2,
+      "baseQuenchAndRevealSec": 1.5
+    },
+    "materialUnitsPerRoll": 1,
+    "rarity": {
+      "names": [
+        "Common",
+        "Uncommon",
+        "Rare",
+        "Epic",
+        "Legendary",
+        "Mythic"
+      ],
+      "baseChancePercent": [
+        65.045,
+        23,
+        9,
+        2.5,
+        0.45,
+        0.005
+      ],
+      "scaledWithLuck": [
+        "Rare",
+        "Epic",
+        "Legendary",
+        "Mythic"
+      ],
+      "unchangedWithLuck": [
+        "Uncommon"
+      ],
+      "remainderCategory": "Common",
+      "valueBandPositions": [
+        0.05,
+        0.12,
+        0.25,
+        0.45,
+        0.75,
+        0.95
+      ]
+    },
+    "craftsmanship": {
+      "names": [
+        "Crude",
+        "Standard",
+        "Fine",
+        "Masterwork",
+        "Perfect"
+      ],
+      "baseChancePercent": [
+        24,
+        42,
+        24,
+        9,
+        1
+      ],
+      "valueBandOffsets": [
+        -0.02,
+        -0.01,
+        0,
+        0.025,
+        0.05
+      ]
+    },
+    "trait": {
+      "baseChanceByRarityPercent": [
+        2,
+        4,
+        8,
+        15,
+        30,
+        50
+      ],
+      "bonusToValuePosition": 0.025
+    },
+    "payout": {
+      "jitterMin": -0.01,
+      "jitterMax": 0.01,
+      "positionMin": 0.01,
+      "positionMax": 0.99
+    }
+  },
+  "production": {
+    "baseOreIntervalSec": 6,
+    "baseSmeltIntervalSec": 6.5,
+    "activeMaterialPenaltyNote": "Newest unlocked material begins near base production speed; older material benefits from extractor-tier advantage.",
+    "maxOlderMaterialRateMultiplier": 4,
+    "olderMaterialRateMultiplierPerTier": 1.15,
+    "baseIngotStorageCapacity": 30,
+    "upgradeTracks": [
+      "ExtractorTier (unlock materials)",
+      "ExtractorOutput",
+      "SmelterSpeed",
+      "StorageCapacity",
+      "FurnaceHeat",
+      "AnvilFinish"
+    ],
+    "maxConfiguredProductionFamilyMultiplier": 3,
+    "capacityOfflineNote": "Offline accrual allowed within ingot/ore storage limits, with elapsed-time cap; finalize cap in playtest."
+  },
+  "companions": {
+    "startingEquippedSlots": 2,
+    "earnableMaxEquippedSlots": 3,
+    "initialEggs": "Earned coins",
+    "hatchesFreePerAction": 1,
+    "premiumHatchBatchOptions": [
+      3,
+      5
+    ],
+    "bonusFamilyCapMultiplier": 3
+  },
+  "evolution": {
+    "firstRankRequirement": {
+      "weaponsForgedSinceLastEvolution": 150,
+      "highestMaterialTierReached": 4
+    },
+    "rankNForgeThresholdFormula": "150 + 50 * currentEvolutionRank",
+    "rankNExtractorTierGateFormula": "min(32, 4 + 2 * currentEvolutionRank)",
+    "normalReset": [
+      "coins",
+      "rawOre",
+      "ingots",
+      "temporaryExtractorTier",
+      "temporaryMachineLevels"
+    ],
+    "normalKeep": [
+      "materialDiscoveryCatalog",
+      "weaponCollection",
+      "weaponJournal",
+      "pets",
+      "permanentGearCosmetics",
+      "gamepasses",
+      "evolutionRank",
+      "lifetimeStats"
+    ],
+    "protectedEvolutionRequiresEligibleEntitlement": true,
+    "eligibleMilestoneCountersResetOnBothPaths": true,
+    "permanentBoostsProposed": {
+      "productionPerRankPercent": 15,
+      "forgePreparationSpeedPerRankPercent": 3
+    }
+  },
+  "metrics": [
+    "lifetimeEarnedCoins",
+    "weaponsForged",
+    "evolutionRank",
+    "highestWeaponValue"
+  ],
+  "prototypeEconomy": {
+    "priceMinFormula": "round(12 * 1.78^(materialIndex-1))",
+    "priceMaxFormula": "18 * priceMin",
+    "materialUnlockCostFormula": "ceil((10 + 2*(materialIndex-2)) * expectedSalePriceAtLuck2_5(previousMaterial))",
+    "priceApproximationNote": "Expected sale price at luck 2.5 uses rarity value-band position only; final roll adds craftsmanship offsets, trait bonus and jitter, so costs must be re-simulated.",
+    "forgeBasicCostsMaterialUnits": 1
+  }
+}

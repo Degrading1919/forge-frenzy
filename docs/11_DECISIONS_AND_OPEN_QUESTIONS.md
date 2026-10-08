@@ -63,3 +63,12 @@
 **Evolution protection versus economic inflation:** retained cash and machines can trivially allow recursive evolution. Use fresh milestone gates and make rewards worthwhile for regular free resets.
 
 **Huge content count versus one-session development:** prefer registries/material skins/effects to bespoke implementation. Finish one beautiful, tested forge loop before filling every menu with placeholder content.
+
+
+## October 7 prototype resolution: balancing candidates documented, not owner-locked
+
+For implementation preparation, [docs/13_PLAYTEST_BALANCE_V0.md](13_PLAYTEST_BALANCE_V0.md) and [design/balance-v0.json](../design/balance-v0.json) now propose concrete defaults for: 32 material price bands and extractor unlock costs; a 6-second clicking window and luck formula; rarity probability functions and skill-independent craftsmanship; 3-stage forge times; ore/smelting rates; initial pet equip slots; evolution threshold and reset candidates; server-persistent leaderboard metrics. These are **PROPOSED PLAYTEST INPUTS**, not retroactively approved choices. Validate first-hour fun and fairness before promotion to LOCKED or shipping balance.
+
+**Newly identified potential conflict:** paid protected evolution preserves machine tier; eligibility must require a genuinely fresh progression milestone rather than testing currently held extractor tier. The prototype doc prescribes a fresh-tier-equivalent milestone for protected evolution, to prevent infinite chaining. Do not ship a protection product before this is implemented and verified.
+
+**Current launch blockers:** Roblox Studio MCP access and authoritative place structure not verified; exact product IDs/prices and entitlement approval outstanding; live paid-random disclosure/eligibility review; real art imports; economy simulation and human first-hour playtest.

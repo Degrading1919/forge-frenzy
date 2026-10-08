@@ -26,6 +26,9 @@ Build a blacksmithing empire without turning the game into a sprawling RPG. Work
 | [Build acceptance](docs/10_BUILD_AND_ACCEPTANCE.md) | Scope, tests, playtest and completion definition |
 | [Decision log and open questions](docs/11_DECISIONS_AND_OPEN_QUESTIONS.md) | Locked versus proposed versus untested |
 | [Economy and balance planning](docs/12_ECONOMY_AND_BALANCE.md) | Curve constraints, payout math, tuning milestones |
+| [Prototype balance v0](docs/13_PLAYTEST_BALANCE_V0.md) | Concrete 32-material cost curve, forge odds, machine rates and evolution defaults |
+| [Claude Desktop build mission](docs/14_CLAUDE_BUILD_MISSION.md) | Ready-to-paste autonomous orchestrator prompt |
+| [Machine-readable v0 balance](design/balance-v0.json) | Prototype configurations and explicit material prices |
 
 Agents should read [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
