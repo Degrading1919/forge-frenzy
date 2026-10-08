@@ -32,7 +32,7 @@ local function buildVault()
 	vault.storage = Kit.upgradeRow(body, 1, "StorageCapacity", "📦", C.blue, function(level)
 		local p = State.profile
 		local apron = p and p.gear and p.gear.Apron or 0
-		return string.format("%d per metal", 25 + 10 * level + 25 * apron)
+		return string.format("%d each", 25 + 10 * level + 25 * apron)
 	end)
 	Panels.section(body, 2, nil, "BINS")
 	vault.bins = Theme.make("Frame", { LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = body })

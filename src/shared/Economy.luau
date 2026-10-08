@@ -43,7 +43,7 @@ Economy.STARTER_CLASS = 4
 export type Bonuses = { extract: number, smelt: number, prep: number, storage: number }
 export type Weapon = ForgeMath.Weapon
 export type Line = { m: number, ore: number, po: number, ps: number }
-export type Station = { m: number, c: number, keep: number }
+export type Station = { m: number, c: number, keep: number, auto: string? }
 
 export type Profile = {
 	schemaVersion: number,
@@ -180,6 +180,8 @@ local function fitWorkshop(p: Profile)
 				m = clampMaterial(station.m, p.unlockedTier),
 				c = if ForgeMath.isValidClass(station.c) then station.c else Economy.STARTER_CLASS,
 				keep = math.clamp(nonNegativeInt(station.keep, 4), 1, 7),
+				-- Auto mode to resume after a rejoin ("free" / "premium"), nil when off.
+				auto = if station.auto == "free" or station.auto == "premium" then station.auto else nil,
 			}
 		else
 			stations[i] = newStation(p.unlockedTier)

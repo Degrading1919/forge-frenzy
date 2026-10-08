@@ -168,7 +168,7 @@ function Data.products(): ({ any }, boolean)
 end
 
 -- Bonus summary text for a companion bonus table of fractions.
-local BONUS_LABELS = { extract = "Extract", smelt = "Smelt", prep = "Prep", storage = "Storage" }
+local BONUS_LABELS = { extract = "Ore Speed", smelt = "Smelt Speed", prep = "Forge Speed", storage = "Storage" }
 function Data.bonusText(b: any): string
 	local parts = {}
 	for _, key in { "extract", "smelt", "prep", "storage" } do

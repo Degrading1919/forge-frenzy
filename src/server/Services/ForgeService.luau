@@ -250,6 +250,7 @@ begin = function(player: Player, station: any, mode: any, resumeOf: Session?): (
 				phaseName = "waiting",
 			}
 			list[station] = waiting
+			recipe.auto = mode
 			firePhase(player, waiting, "waiting", "NoMaterial")
 			scheduleWait(player, station, mode, waiting)
 			return true, { sessionId = waiting.id, station = station, waiting = true }
@@ -283,6 +284,7 @@ begin = function(player: Player, station: any, mode: any, resumeOf: Session?): (
 		phaseName = "heat",
 	}
 	list[station] = session
+	recipe.auto = if mode ~= "manual" then mode else nil
 	firePhase(player, session, "heat", nil, timing.heatSec)
 	ForgeService.delay(timing.heatSec, function()
 		if list[station] == session and not session.done then
@@ -452,6 +454,14 @@ end
 function ForgeService.stopAuto(player: Player, station: any): (boolean, any)
 	local list = stationsOf(player)
 	local stopped = false
+	local data = DataService.get(player)
+	if data then
+		for index, recipe in data.stations do
+			if station == nil or index == station then
+				recipe.auto = nil
+			end
+		end
+	end
 	for index, session in list do
 		if (station == nil or index == station) and session.auto then
 			session.done = true
@@ -486,6 +496,7 @@ function ForgeService.configure(player: Player, station: any, materialIndex: any
 		return false, result
 	end
 	local wasAuto = session ~= nil and session.auto
+	result.auto = nil
 	if session and session.auto then
 		session.done = true
 		session.readyAt = ForgeService.clock()
@@ -551,7 +562,31 @@ function ForgeService.odds(mode: any): ForgeMath.OddsTable
 	return ForgeMath.oddsTable(ForgeMath.autoLuck(mode) or ForgeMath.MAX_LUCK)
 end
 
+-- Restarts the auto forges a player left running (called when their profile loads).
+function ForgeService.resumeAuto(player: Player)
+	local data = DataService.get(player)
+	if not data then
+		return
+	end
+	for index, recipe in data.stations do
+		local mode = recipe.auto
+		if mode == "free" or mode == "premium" then
+			local ok = begin(player, index, mode)
+			if not ok then
+				recipe.auto = nil
+			end
+		end
+	end
+end
+
 function ForgeService.init()
+	DataService.profileLoaded.Event:Connect(function(player)
+		task.delay(2, function()
+			if player.Parent == Players then
+				ForgeService.resumeAuto(player)
+			end
+		end)
+	end)
 	Players.PlayerRemoving:Connect(function(player)
 		local list = sessions[player]
 		if list then

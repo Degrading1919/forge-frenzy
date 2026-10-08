@@ -321,6 +321,10 @@ function WorkshopService.stealBegin(thief: any, plot: any, slot: any): (boolean,
 		return false, "AlreadyCarrying"
 	end
 	local now = deps.now()
+	-- The lock is the most important answer, so it comes before personal cooldowns.
+	if Logic.isLocked(lockOf(plot), now) then
+		return false, "ForgeLocked"
+	end
 	if lastSteal[thief] and now - lastSteal[thief] < Logic.STEAL_COOLDOWN_SEC then
 		return false, "StealCooldown"
 	end

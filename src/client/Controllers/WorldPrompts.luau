@@ -42,17 +42,22 @@ local function prompt(att: Instance, action: string, object: string, onTrigger: 
 	p.Style = Enum.ProximityPromptStyle.Default
 	p.Triggered:Connect(function()
 		Sfx.play("click")
-		onTrigger()
+		onTrigger(att)
 	end)
 	p.Parent = att
 	made[att] = p
 	return p
 end
 
+-- The station a panel was opened from; walking away from it closes the panel, so stations
+-- feel like real places instead of remote menus.
+local openedFrom: { att: Attachment?, name: string? } = {}
+
 local function open(name: string, arg: any?)
-	return function()
+	return function(att: Attachment?)
 		if Reveal.isOpen() then return end
 		Panels.open(name, arg)
+		openedFrom.att, openedFrom.name = att, name
 	end
 end
 
@@ -303,6 +308,20 @@ local function refresh()
 end
 
 function WorldPrompts.start()
+	task.spawn(function()
+		while true do
+			task.wait(0.3)
+			local att = openedFrom.att
+			if att and openedFrom.name and Panels.isOpen(openedFrom.name) then
+				local char = Players.LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				if root and att.Parent and (root.Position - att.WorldPosition).Magnitude > 22 then
+					Panels.close()
+					openedFrom.att = nil
+				end
+			end
+		end
+	end)
 	-- New pads and buildings appear as the player builds, so keep scanning.
 	while true do
 		local ok, err = pcall(refresh)
