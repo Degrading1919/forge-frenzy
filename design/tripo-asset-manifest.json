@@ -1,0 +1,1585 @@
+{
+  "status": "PROPOSED",
+  "version": "1.0.0",
+  "updated": "2026-10-08",
+  "description": "Official Tripo3D asset manifest for Forge Frenzy. See docs/15_TRIPO_ASSET_MANIFEST.md for conventions. Generating assets with paid Tripo credits requires owner authorization.",
+  "polycountUnit": "triangles",
+  "styleSentence": "Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+  "promptFormat": "<one-sentence subject description>. <styleSentence>",
+  "priorities": {
+    "critical": "Needed for the playable loop or the first impression; generate first.",
+    "important": "Needed for the complete game; a coherent fallback exists until generated.",
+    "nice-to-have": "Polish or premium extras; skip freely if budget is tight."
+  },
+  "categories": [
+    {
+      "id": "core-machine",
+      "name": "Core workshop machines"
+    },
+    {
+      "id": "premium-machine",
+      "name": "Premium workshop machines"
+    },
+    {
+      "id": "standard-weapon",
+      "name": "Standard weapon base meshes (Common to Epic)"
+    },
+    {
+      "id": "legendary-mythic-weapon",
+      "name": "Legendary and Mythic weapons"
+    },
+    {
+      "id": "blacksmith-gear",
+      "name": "Blacksmith gear"
+    },
+    {
+      "id": "companion",
+      "name": "Forge Companions (earnable)"
+    },
+    {
+      "id": "premium-companion",
+      "name": "Premium and limited companions"
+    },
+    {
+      "id": "egg-hatch",
+      "name": "Eggs and hatch station"
+    },
+    {
+      "id": "showcase",
+      "name": "Collection showcase displays"
+    },
+    {
+      "id": "workshop-prop",
+      "name": "Environmental workshop props"
+    },
+    {
+      "id": "hub-prop",
+      "name": "Hub and leaderboard props"
+    },
+    {
+      "id": "signature-set-piece",
+      "name": "Signature set pieces and hero props"
+    },
+    {
+      "id": "ui-display",
+      "name": "UI-adjacent 3D display assets"
+    }
+  ],
+  "assets": [
+    {
+      "id": "extractor-era1",
+      "name": "Extractor Mk I: Prospector Drill",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 1 (Copper, Tin, Bronze, Iron).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 1800,
+        "min": 1200,
+        "max": 3000
+      },
+      "prompt": "A compact timber-and-copper ore extractor machine with a crank-driven drill boring into a rock pile, a side hopper and a small ore chute, in warm earthy brass and wood tones. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Must read clearly at plot distance and on phone screens; the drill needs a separate part so it can spin."
+    },
+    {
+      "id": "extractor-era2",
+      "name": "Extractor Mk II: Polished Steel Extractor",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 2 (Steel, Silver, Gold, Platinum).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 2200,
+        "min": 1500,
+        "max": 3500
+      },
+      "prompt": "A polished steel ore extractor machine with a clean piston drill, silver trim, gold rivets and a tidy ore conveyor chute. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era3",
+      "name": "Extractor Mk III: Industrial Extractor",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 3 (Cobalt, Titanium, Tungsten, Osmium).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 2600,
+        "min": 1800,
+        "max": 4000
+      },
+      "prompt": "A heavy dark-iron industrial ore extractor machine with a twin-piston drill, thick cobalt-blue armor plates, short exhaust stacks and a reinforced ore chute. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era4",
+      "name": "Extractor Mk IV: Arcane Extractor",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 4 (Moonsteel, Mithril, Runite, Adamantite).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 3000,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "An enchanted ore extractor machine with a rune-etched drill, floating blue-green crystals powering its gears and a softly glowing ore chute. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era5",
+      "name": "Extractor Mk V: Elemental Extractor",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 5 (Emberite, Frostsilver, Stormium, Obsidian).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 3200,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "An elemental ore extractor machine with an obsidian frame, a drill wreathed in ember, frost and lightning accents, and swirling elemental cores in glass housings. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era6",
+      "name": "Extractor Mk VI: Forbidden Extractor",
+      "category": "core-machine",
+      "priority": "nice-to-have",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 6 (Bloodiron, Soulsteel, Starsteel, Voidmetal).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 3400,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "A forbidden-metal ore extractor machine with a crimson iron frame, a spectral soul-lantern core, star-flecked armor plates and a dark void-portal drill head. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era7",
+      "name": "Extractor Mk VII: Celestial Extractor",
+      "category": "core-machine",
+      "priority": "nice-to-have",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 7 (Sunmetal, Lunarite, Astralite, Etherium).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 3400,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "A celestial ore extractor machine with a radiant gold and pearl frame, a sun-disc drill head, orbiting astral rings and soft blue star lights. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "extractor-era8",
+      "name": "Extractor Mk VIII: Ancient Extractor",
+      "category": "core-machine",
+      "priority": "nice-to-have",
+      "use": "Extractor chassis shown while the plot's highest extractor tier is in era 8 (Chronosteel, Nebulium, Aetherglass, Primordium).",
+      "reuse": "One chassis covers 4 material tiers; the 4 tiers inside an era differ by tint, ore-chute particle color and small attachments. Ore color in the chute comes from the selected material.",
+      "polycount": {
+        "target": 3600,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "An ancient otherworldly ore extractor machine with a weathered stone-and-glass frame, a clockwork hourglass core, nebula-filled crystal panels and a prism drill head. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: reuse the previous era's chassis with new tint, emissive trim and particles."
+    },
+    {
+      "id": "smelter-basic",
+      "name": "Smelter",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Converts raw ore to ingots; visible pour animation per ingot.",
+      "reuse": "Used for all smelter levels before the advanced look; levels add tint, chimney smoke and glow intensity.",
+      "polycount": {
+        "target": 1800,
+        "min": 1200,
+        "max": 3000
+      },
+      "prompt": "A squat brick-and-iron smelter with a glowing crucible mouth, a pouring spout feeding an ingot mold tray and a short chimney. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Separate the crucible lip and spout so molten-metal VFX can attach."
+    },
+    {
+      "id": "smelter-arcane",
+      "name": "Arcane Refinery",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Advanced smelter appearance for high smelter levels.",
+      "reuse": "Shared by all high smelter levels; per-level tint and particles.",
+      "polycount": {
+        "target": 3000,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "An upgraded arcane refinery with a rune-banded steel crucible, a floating molten-metal orb, twin pouring spouts and a glowing ingot mold tray. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "storage-rack",
+      "name": "Ingot Storage Rack",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Material storage station; fill level shown with stacked ingot meshes.",
+      "reuse": "Used for low storage levels; the shelf contents reuse the ingot UI mesh with the material skin.",
+      "polycount": {
+        "target": 1200,
+        "min": 800,
+        "max": 2000
+      },
+      "prompt": "A sturdy wooden ingot storage rack with iron bands, three open shelves and a front capacity gauge dial. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Keep shelves empty in the mesh; ingots are placed as separate instances."
+    },
+    {
+      "id": "storage-vault",
+      "name": "Reinforced Material Vault",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Advanced storage appearance for high capacity levels.",
+      "reuse": "Shared by all high storage levels.",
+      "polycount": {
+        "target": 2400,
+        "min": 1500,
+        "max": 3500
+      },
+      "prompt": "A reinforced steel material vault with a round riveted door, brass pipes, a large capacity gauge and glowing rune locks. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Gauge needle as a separate part for a live fill indicator."
+    },
+    {
+      "id": "furnace-basic",
+      "name": "Forge Furnace",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Heat phase of every forge attempt; the player's main station with the anvil.",
+      "reuse": "Used for low furnace levels; levels raise fire VFX and glow.",
+      "polycount": {
+        "target": 2000,
+        "min": 1200,
+        "max": 3500
+      },
+      "prompt": "A classic stone blacksmith forge furnace with an open glowing coal hearth, a leather bellows on the side and a brick chimney hood. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Hearth opening must face the anvil side; fire is VFX, not geometry."
+    },
+    {
+      "id": "furnace-runic",
+      "name": "Runic Furnace",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Advanced furnace appearance for high furnace levels.",
+      "reuse": "Shared by all high furnace levels.",
+      "polycount": {
+        "target": 3200,
+        "min": 2000,
+        "max": 4000
+      },
+      "prompt": "An upgraded runic forge furnace with a dark iron shell, a rune-carved stone hearth, blue-white magical flames and a winged chimney hood. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "anvil-basic",
+      "name": "Anvil",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Where the click/tap forge minigame happens; strike sparks and hammer animation target its face.",
+      "reuse": "Used for low anvil levels; also reused as a hub prop.",
+      "polycount": {
+        "target": 1200,
+        "min": 700,
+        "max": 2000
+      },
+      "prompt": "A classic iron blacksmith anvil on a thick tree-stump base with a pair of tongs resting against it. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Flat top face aligned to +Y with an attachment for the billet; highest-traffic visual in the game."
+    },
+    {
+      "id": "anvil-masterwork",
+      "name": "Masterwork Anvil",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Advanced anvil appearance for high anvil levels (comfort upgrades, never above the 5x luck cap).",
+      "reuse": "Shared by all high anvil levels.",
+      "polycount": {
+        "target": 2400,
+        "min": 1500,
+        "max": 3500
+      },
+      "prompt": "An ornate masterwork anvil with a gold-inlaid horn, a rune-etched striking face and a carved stone pedestal. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Same top-face height and attachment as the basic anvil so animations do not change."
+    },
+    {
+      "id": "quench-trough",
+      "name": "Quench Trough",
+      "category": "core-machine",
+      "priority": "important",
+      "use": "Visual quench phase before the reveal (doc 13: not its own upgrade track at launch).",
+      "reuse": "Single mesh; steam and splash are VFX.",
+      "polycount": {
+        "target": 1200,
+        "min": 700,
+        "max": 2000
+      },
+      "prompt": "A wooden quench trough banded with iron and filled with water, with a small hand pump and a rack of tongs. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Water surface as a separate part for a transparent material."
+    },
+    {
+      "id": "auto-hammer-basic",
+      "name": "Basic Auto Hammer",
+      "category": "core-machine",
+      "priority": "critical",
+      "use": "Free auto-forge mode (1.5x luck) mounted beside the anvil.",
+      "reuse": "Single mesh; the premium auto-forge replaces it visually.",
+      "polycount": {
+        "target": 1600,
+        "min": 1000,
+        "max": 2500
+      },
+      "prompt": "A simple wooden auto-hammer rig that clamps beside an anvil, with a crank wheel, a leather drive belt and a swinging iron hammer arm. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Hammer arm as a separate part with its pivot at the hinge for a simple tween animation."
+    },
+    {
+      "id": "premium-titan-excavator",
+      "name": "Titan Excavator",
+      "category": "premium-machine",
+      "priority": "important",
+      "use": "Premium extractor replacement with boosted ore output (bonus OPEN; illustrative ~2x).",
+      "reuse": "Single mesh for every material; ore chute particles take the selected material color.",
+      "polycount": {
+        "target": 5000,
+        "min": 3500,
+        "max": 6000
+      },
+      "prompt": "A massive premium titan excavator machine with a giant golden drill, armored dark-steel treads, glowing amber power cores and a towering ore hopper. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Must not unlock any material; same footprint as the era extractors."
+    },
+    {
+      "id": "premium-dragon-furnace",
+      "name": "Dragon Furnace",
+      "category": "premium-machine",
+      "priority": "important",
+      "use": "Premium furnace replacement with faster heat preparation.",
+      "reuse": "Single mesh; tint variants can serve limited-edition skins.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 6000
+      },
+      "prompt": "A premium dragon furnace sculpted as a crouching iron dragon whose open jaws form the glowing forge hearth, with golden scales and ember-red eyes. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Hearth opening in the jaws must line up with the basic furnace's billet position."
+    },
+    {
+      "id": "premium-auto-forge",
+      "name": "Clockwork Auto-Forge Arm",
+      "category": "premium-machine",
+      "priority": "important",
+      "use": "Premium Auto Forge (4x luck) shown beside the anvil while active.",
+      "reuse": "Single mesh; replaces the Basic Auto Hammer.",
+      "polycount": {
+        "target": 4500,
+        "min": 3000,
+        "max": 6000
+      },
+      "prompt": "A premium clockwork auto-forge arm of polished brass and gold with articulated pistons, a gem-studded hammer head and glowing blue gears. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Split into base, upper arm and hammer head for rigid animation."
+    },
+    {
+      "id": "premium-multi-forge",
+      "name": "Multi-Forge Twin Anvil",
+      "category": "premium-machine",
+      "priority": "important",
+      "use": "Multi-Forge throughput product; each output still pays material and rolls independently.",
+      "reuse": "Single mesh; reuses the anvil top-face convention twice.",
+      "polycount": {
+        "target": 4000,
+        "min": 3000,
+        "max": 6000
+      },
+      "prompt": "A premium twin-anvil forge station with two linked anvils on a shared gold-trimmed platform, a central hammer turret and small spark vents. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "premium-collection-magnet",
+      "name": "Collection Magnet Pylon",
+      "category": "premium-machine",
+      "priority": "nice-to-have",
+      "use": "Visual for the collection magnet / auto-pickup product.",
+      "reuse": "Single mesh; arcs are VFX.",
+      "polycount": {
+        "target": 3000,
+        "min": 2500,
+        "max": 5000
+      },
+      "prompt": "A premium magnetic collection pylon with a huge horseshoe magnet on a brass tower, crackling blue energy arcs and a floating ingot caught in its pull. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "premium-vip-smelter",
+      "name": "VIP Gilded Smelter",
+      "category": "premium-machine",
+      "priority": "nice-to-have",
+      "use": "VIP workshop machine skin for the smelter with an output/prep boost (bonus OPEN).",
+      "reuse": "Single mesh; the VIP Workshop Gate and this smelter form the VIP plot look.",
+      "polycount": {
+        "target": 4000,
+        "min": 2500,
+        "max": 6000
+      },
+      "prompt": "A premium gilded smelter with a gold-plated crucible shaped like a crown, velvet-red enamel panels, jeweled rivets and a glowing pouring spout. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "weapon-sword-arming",
+      "name": "Arming Sword (Sword design 1)",
+      "category": "standard-weapon",
+      "priority": "critical",
+      "use": "Sword class design 1 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1200,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed arming sword with a straight double-edged blade, a simple cross guard, a wrapped grip and a round pommel, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Required for the vertical slice; follows the weapon import conventions (grip at origin, blade +Y)."
+    },
+    {
+      "id": "weapon-sword-broadsword",
+      "name": "Broadsword (Sword design 2)",
+      "category": "standard-weapon",
+      "priority": "important",
+      "use": "Sword class design 2 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1400,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed broadsword with a wide fullered blade, a swept curled cross guard, a wrapped grip and a faceted pommel, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-sword-falchion",
+      "name": "Falchion (Sword design 3)",
+      "category": "standard-weapon",
+      "priority": "nice-to-have",
+      "use": "Sword class design 3 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1300,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed falchion with a single-edged blade that widens toward a clipped tip, a short knuckle guard and a wrapped grip, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-greatsword-claymore",
+      "name": "Claymore (Greatsword design 1)",
+      "category": "standard-weapon",
+      "priority": "critical",
+      "use": "Greatsword class design 1 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1600,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed claymore greatsword with a long straight blade, a forward-angled cross guard with quatrefoil tips and a long wrapped grip, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Required for the vertical slice; follows the weapon import conventions (grip at origin, blade +Y)."
+    },
+    {
+      "id": "weapon-greatsword-flamberge",
+      "name": "Flamberge (Greatsword design 2)",
+      "category": "standard-weapon",
+      "priority": "important",
+      "use": "Greatsword class design 2 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1800,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed flamberge greatsword with a wavy flame-shaped blade, small parrying hooks above the guard and a long wrapped grip, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-greatsword-cleaver",
+      "name": "Cleaver Greatsword (Greatsword design 3)",
+      "category": "standard-weapon",
+      "priority": "nice-to-have",
+      "use": "Greatsword class design 3 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1600,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed cleaver greatsword with a massive slab-like single-edged blade, a notched spine and a chunky riveted guard, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-axe-hand",
+      "name": "Hand Axe (Axe design 1)",
+      "category": "standard-weapon",
+      "priority": "critical",
+      "use": "Axe class design 1 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1000,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed hand axe with a crescent head, a short haft and a riveted collar, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Required for the vertical slice; follows the weapon import conventions (grip at origin, blade +Y)."
+    },
+    {
+      "id": "weapon-axe-bearded",
+      "name": "Bearded Axe (Axe design 2)",
+      "category": "standard-weapon",
+      "priority": "important",
+      "use": "Axe class design 2 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1200,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed bearded axe with a long hooked lower blade, a back spike and a banded haft, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-axe-double-bit",
+      "name": "Double-Bit Battle Axe (Axe design 3)",
+      "category": "standard-weapon",
+      "priority": "nice-to-have",
+      "use": "Axe class design 3 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1500,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed double-bit battle axe with mirrored crescent heads, a long banded haft and a spiked top, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-dagger-dirk",
+      "name": "Dirk (Dagger design 1)",
+      "category": "standard-weapon",
+      "priority": "critical",
+      "use": "Dagger class design 1 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 700,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A straight dirk dagger with a narrow double-edged blade, a small cross guard and a wrapped grip, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Required for the vertical slice; follows the weapon import conventions (grip at origin, blade +Y)."
+    },
+    {
+      "id": "weapon-dagger-curved",
+      "name": "Curved Dagger (Dagger design 2)",
+      "category": "standard-weapon",
+      "priority": "important",
+      "use": "Dagger class design 2 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 800,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A curved dagger with a sweeping single-edged blade, a disc guard and a ringed pommel, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-dagger-parrying",
+      "name": "Parrying Dagger (Dagger design 3)",
+      "category": "standard-weapon",
+      "priority": "nice-to-have",
+      "use": "Dagger class design 3 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 900,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A parrying dagger with a straight blade, a wide side-prong trident guard and a shell knuckle plate, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-hammer-war",
+      "name": "War Hammer (Hammer design 1)",
+      "category": "standard-weapon",
+      "priority": "critical",
+      "use": "Hammer class design 1 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1200,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A one-handed war hammer with a square striking face, a curved back spike and a banded haft, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Required for the vertical slice; follows the weapon import conventions (grip at origin, blade +Y)."
+    },
+    {
+      "id": "weapon-hammer-maul",
+      "name": "Maul (Hammer design 2)",
+      "category": "standard-weapon",
+      "priority": "important",
+      "use": "Hammer class design 2 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1400,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed maul with a huge blocky hammer head, reinforced corner plates and a long banded haft, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "weapon-hammer-sledge",
+      "name": "Forge Sledge (Hammer design 3)",
+      "category": "standard-weapon",
+      "priority": "nice-to-have",
+      "use": "Hammer class design 3 for Common, Uncommon, Rare and Epic rolls; shown in reveal, inventory, showcase and hand.",
+      "reuse": "Shared by all 32 materials and 4 rarities via color, Roblox material/SurfaceAppearance and rarity/trait VFX. Export metal and grip as two MeshParts so the material skin only tints the metal.",
+      "polycount": {
+        "target": 1300,
+        "min": 500,
+        "max": 2500
+      },
+      "prompt": "A two-handed forge sledgehammer with a tapered octagonal head, rivet bands and a thick wrapped haft, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 mesh serves every design slot."
+    },
+    {
+      "id": "legendary-sword",
+      "name": "Emberheart Blade (Legendary sword)",
+      "category": "legendary-mythic-weapon",
+      "priority": "critical",
+      "use": "Dedicated Legendary design for the Sword class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A legendary one-handed sword with a broad blade split by a glowing molten channel, a flame-winged cross guard and a heart-shaped ember gem in the pommel, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light. Shares its pivot and scale with the Sword design 1 mesh."
+    },
+    {
+      "id": "legendary-greatsword",
+      "name": "Titanspine Greatsword (Legendary greatsword)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Legendary design for the Greatsword class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A legendary two-handed greatsword with a towering stepped blade shaped like a giant's spine, a layered armor-plate guard and a glowing rune running its length, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "legendary-axe",
+      "name": "Stormcleaver (Legendary axe)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Legendary design for the Axe class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A legendary battle axe with a huge crescent blade shaped like a storm cloud, lightning-bolt notches, a coiled haft and a crackling blue gem, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "legendary-dagger",
+      "name": "Moonwhisper Dirk (Legendary dagger)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Legendary design for the Dagger class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A legendary dagger with a slender crescent-moon blade, a guard of curled feathers and a pale glowing moonstone pommel, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "legendary-hammer",
+      "name": "Anvilbreaker (Legendary hammer)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Legendary design for the Hammer class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A legendary war hammer whose head is a miniature runic anvil with glowing forge-orange seams, a chain-wrapped haft and a spiked crown cap, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "mythic-sword",
+      "name": "Eclipse Starblade (Mythic sword)",
+      "category": "legendary-mythic-weapon",
+      "priority": "critical",
+      "use": "Dedicated Mythic design for the Sword class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 7500,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A mythic one-handed sword with a star-flecked blade ringed by a floating eclipse halo, crystal-tipped guard wings and a glowing white core gem, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light. Shares its pivot and scale with the Sword design 1 mesh."
+    },
+    {
+      "id": "mythic-greatsword",
+      "name": "Worldforge Colossus (Mythic greatsword)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Mythic design for the Greatsword class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 7500,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A mythic two-handed greatsword with a colossal blade inlaid with glowing molten rivers, floating rock shards orbiting the guard and a sun gem pommel, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "mythic-axe",
+      "name": "Voidmaw Reaver (Mythic axe)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Mythic design for the Axe class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 7500,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A mythic double axe whose twin blades curve like jaws around a swirling void portal, with jagged crystal teeth and a spectral flame-wrapped haft, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "mythic-dagger",
+      "name": "Chronoshard (Mythic dagger)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Mythic design for the Dagger class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 7500,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A mythic dagger with a faceted crystal blade holding a tiny glowing hourglass, a floating clockwork ring guard and a gear-shaped pommel, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "mythic-hammer",
+      "name": "Primordial Starhammer (Mythic hammer)",
+      "category": "legendary-mythic-weapon",
+      "priority": "important",
+      "use": "Dedicated Mythic design for the Hammer class; reveal centerpiece, masterpiece pedestal and hand-held.",
+      "reuse": "Reskinned across all 32 materials on the main metal parts; glow/gem parts keep the rarity color. Traits add VFX only.",
+      "polycount": {
+        "target": 7500,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A mythic hammer with a head carved from a glowing meteor core bound in metal bands, tiny orbiting stars and a long rune-carved haft, with its main metal in neutral silver ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fallback if not generated: the class's design 1 standard mesh with a rarity aura VFX and pedestal light."
+    },
+    {
+      "id": "gear-smith-hammer",
+      "name": "Smith's Hammer",
+      "category": "blacksmith-gear",
+      "priority": "critical",
+      "use": "Equipped tool held during forging; Wooden and Steel gear tiers.",
+      "reuse": "One mesh for both lower hammer tiers via texture and material swap; limited-edition hammer skins reuse it too.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1500
+      },
+      "prompt": "A blacksmith's cross-peen hand hammer with a sturdy handle and a plain head, with neutral light-gray metal and a plain brown grip ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Grip at origin, head along +Y, sized for the R15 right hand."
+    },
+    {
+      "id": "gear-enchanted-hammer",
+      "name": "Enchanted Smith's Hammer",
+      "category": "blacksmith-gear",
+      "priority": "important",
+      "use": "Equipped tool for the Enchanted and Legendary hammer tiers.",
+      "reuse": "One mesh for both upper tiers; Legendary adds gold skin and particles.",
+      "polycount": {
+        "target": 2000,
+        "min": 1200,
+        "max": 3000
+      },
+      "prompt": "An enchanted blacksmith's hand hammer with a rune-etched head, a gold-banded handle, a glowing gem inset and small floating spark runes. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Same grip attachment as the Smith's Hammer."
+    },
+    {
+      "id": "gear-gloves",
+      "name": "Blacksmith Gloves",
+      "category": "blacksmith-gear",
+      "priority": "important",
+      "use": "Visible glove gear (Leather, Reinforced, Runic tiers).",
+      "reuse": "One mesh pair for all three tiers via texture; runic tier adds emissive rune decals.",
+      "polycount": {
+        "target": 600,
+        "min": 300,
+        "max": 1000
+      },
+      "prompt": "A pair of thick blacksmith work gloves with stitched leather cuffs and riveted knuckle pads, posed open and flat. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Needs fitting as Roblox rigid accessories on R15 hands; fallback is Studio-built cuff parts."
+    },
+    {
+      "id": "gear-apron",
+      "name": "Blacksmith Apron",
+      "category": "blacksmith-gear",
+      "priority": "important",
+      "use": "Visible apron gear (Basic, Armored, Master tiers).",
+      "reuse": "One mesh for all tiers via texture; Armored/Master add small attachment plates.",
+      "polycount": {
+        "target": 1000,
+        "min": 500,
+        "max": 1500
+      },
+      "prompt": "A heavy blacksmith apron with a leather bib, tool pockets, a brass buckle strap and singed edges, shaped to fit a blocky character torso. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Fit as an UpperTorso accessory; test with several avatar body types."
+    },
+    {
+      "id": "pet-ore-golem",
+      "name": "Ore Golem",
+      "category": "companion",
+      "priority": "critical",
+      "use": "Equippable companion that follows the player or idles at its machine. Extraction bonus (doc 05).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 2500,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute chibi ore golem companion made of chunky rounded rocks with glowing ore veins, stubby arms and big friendly gem eyes, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-ember-sprite",
+      "name": "Ember Sprite",
+      "category": "companion",
+      "priority": "critical",
+      "use": "Equippable companion that follows the player or idles at its machine. Furnace preparation-time bonus (doc 05).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 1500,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute floating ember sprite companion shaped like a round flame with a tiny smiling face, little ember arms and a crackling coal core. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Floating body needs no leg rig; bob and flicker can be tweens."
+    },
+    {
+      "id": "pet-clockwork-helper",
+      "name": "Clockwork Helper",
+      "category": "companion",
+      "priority": "critical",
+      "use": "Equippable companion that follows the player or idles at its machine. Smelting rate/efficiency bonus (doc 05).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 2500,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute clockwork helper robot companion with a round brass body, a wind-up key on its back, little gear hands and a single glowing lens eye, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-anvil-tortoise",
+      "name": "Anvil Tortoise",
+      "category": "companion",
+      "priority": "important",
+      "use": "Equippable companion that follows the player or idles at its machine. Storage capacity bonus (proposed).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 2500,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute tortoise companion whose shell is a small riveted iron anvil, with stubby legs and sleepy friendly eyes, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-coal-mole",
+      "name": "Coal Mole",
+      "category": "companion",
+      "priority": "important",
+      "use": "Equippable companion that follows the player or idles at its machine. Alternate extraction bonus body for a second egg tier (proposed).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 2000,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute mole companion with coal-black fur, big digging claws, a pink nose and a tiny miner's helmet with a lamp, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-rune-owl",
+      "name": "Rune Owl",
+      "category": "companion",
+      "priority": "important",
+      "use": "Equippable companion that follows the player or idles at its machine. Refining or preparation bonus body for a higher egg tier (proposed).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 2200,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute round owl companion with bronze feather plates, glowing rune markings on its wings and large lantern-like eyes, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-phoenix-hatchling",
+      "name": "Phoenix Hatchling",
+      "category": "companion",
+      "priority": "important",
+      "use": "Equippable companion that follows the player or idles at its machine. Top earnable companion, proving strong pets are reachable free (proposed).",
+      "reuse": "Common through Legendary variants of this companion are recolors, materials and aura VFX on one mesh and rig.",
+      "polycount": {
+        "target": 3500,
+        "min": 1000,
+        "max": 4000
+      },
+      "prompt": "A cute baby phoenix companion with fluffy flame-colored feathers, a golden crest, ember-tipped wings and a glowing tail plume, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rig after Blender cleanup; idle, follow and happy animations shared across bodies of the same rig family."
+    },
+    {
+      "id": "pet-golden-forge-dragon",
+      "name": "Golden Forge Dragon",
+      "category": "premium-companion",
+      "priority": "important",
+      "use": "Guaranteed premium companion sold directly with disclosed bonuses (extraction and smelting, within the 3x family cap).",
+      "reuse": "One mesh and rig; any limited or seasonal recolors reuse it.",
+      "polycount": {
+        "target": 5000,
+        "min": 3500,
+        "max": 6000
+      },
+      "prompt": "A premium chubby baby dragon companion with gleaming gold scales, a small anvil-shaped chest plate, a glowing ember belly and tiny wings, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Signature premium pet; budget allows extra wing and tail bones."
+    },
+    {
+      "id": "pet-starter-forge-pup",
+      "name": "Forge Pup",
+      "category": "premium-companion",
+      "priority": "nice-to-have",
+      "use": "Useful companion in the optional Blacksmith Starter Pack.",
+      "reuse": "One mesh and rig; any limited or seasonal recolors reuse it.",
+      "polycount": {
+        "target": 3000,
+        "min": 2500,
+        "max": 4500
+      },
+      "prompt": "A cute puppy companion with copper-plated armor patches, a tiny blacksmith apron and a wagging spark-tipped tail, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "pet-magma-kirin",
+      "name": "Magma Kirin",
+      "category": "premium-companion",
+      "priority": "nice-to-have",
+      "use": "Limited-edition premium companion (doc 07 category 7); no fake scarcity.",
+      "reuse": "One mesh and rig; any limited or seasonal recolors reuse it.",
+      "polycount": {
+        "target": 5500,
+        "min": 4000,
+        "max": 6000
+      },
+      "prompt": "A premium limited-edition magma kirin companion with obsidian hooves, glowing lava-crack fur, a curling flame mane and a single crystal horn, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Pair with an earnable seasonal option per doc 05."
+    },
+    {
+      "id": "pet-frostforge-yeti-cub",
+      "name": "Frostforge Yeti Cub",
+      "category": "premium-companion",
+      "priority": "nice-to-have",
+      "use": "Seasonal companion with an earnable path and an optional premium variant skin.",
+      "reuse": "One mesh and rig; any limited or seasonal recolors reuse it.",
+      "polycount": {
+        "target": 3000,
+        "min": 2500,
+        "max": 4500
+      },
+      "prompt": "A cute seasonal yeti cub companion with fluffy frost-blue fur, a tiny forge-mitt scarf and icicle-crystal horns, standing in a neutral pose with limbs slightly apart for rigging. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Earnable seasonal version uses the same mesh as the premium skin."
+    },
+    {
+      "id": "egg-forge",
+      "name": "Forge Egg",
+      "category": "egg-hatch",
+      "priority": "critical",
+      "use": "Every earnable coin-bought egg tier; shown at the hatch station, in hatch animation and UI.",
+      "reuse": "One mesh skinned per egg tier (e.g. Copper, Arcane, Celestial bands) and for seasonal earnable eggs.",
+      "polycount": {
+        "target": 600,
+        "min": 300,
+        "max": 1000
+      },
+      "prompt": "A rounded forge egg with riveted metal bands wrapping the shell, a glowing seam crack and a small ember crest on top. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Split shell halves in Blender for the crack-open animation."
+    },
+    {
+      "id": "egg-gilded",
+      "name": "Gilded Premium Egg",
+      "category": "egg-hatch",
+      "priority": "important",
+      "use": "Optional special egg (paid-random rules MUST be checked before enabling).",
+      "reuse": "One mesh; limited editions are recolors.",
+      "polycount": {
+        "target": 1200,
+        "min": 600,
+        "max": 2000
+      },
+      "prompt": "A premium gilded egg with ornate gold filigree, embedded gemstones, glowing rune seams and a tiny crown-shaped top. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Same size and split as the Forge Egg so the hatch animation is shared."
+    },
+    {
+      "id": "hatch-station",
+      "name": "Hatch Station Incubator",
+      "category": "egg-hatch",
+      "priority": "critical",
+      "use": "Interactable egg purchase and hatch station in the hub or on plots.",
+      "reuse": "Single mesh; the displayed egg swaps per tier.",
+      "polycount": {
+        "target": 4000,
+        "min": 2500,
+        "max": 5000
+      },
+      "prompt": "An egg hatching incubator station with a stone and brass forge base, a glass dome over a glowing nest, steam vents and a crank lever. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Dome as a separate transparent part; nest attachment for the egg."
+    },
+    {
+      "id": "egg-display-pedestal",
+      "name": "Egg Display Pedestal",
+      "category": "egg-hatch",
+      "priority": "nice-to-have",
+      "use": "Shows each purchasable egg tier and its odds board beside the hatch station.",
+      "reuse": "One mesh repeated per egg tier.",
+      "polycount": {
+        "target": 600,
+        "min": 300,
+        "max": 1000
+      },
+      "prompt": "A small round egg display pedestal with a brass rim, a velvet cushion and soft glowing rune trim. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "showcase-wall-rack",
+      "name": "Wall Weapon Rack",
+      "category": "showcase",
+      "priority": "important",
+      "use": "Holds kept weapons on plot walls.",
+      "reuse": "Repeated on every plot; weapons are inserted at three attachments.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1500
+      },
+      "prompt": "A wooden wall-mounted weapon rack with iron hooks for three weapons and a small engraved brass nameplate. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "showcase-glass-case",
+      "name": "Glass Display Case",
+      "category": "showcase",
+      "priority": "important",
+      "use": "Single-weapon display for a player's best Epic-or-better items with title, material, rarity, quality, traits and value.",
+      "reuse": "Repeated on every plot; plaque text is a SurfaceGui.",
+      "polycount": {
+        "target": 1500,
+        "min": 800,
+        "max": 2500
+      },
+      "prompt": "A tall glass display case with a dark wood and brass frame, a velvet weapon stand inside and a small engraved plaque. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Glass as a separate part."
+    },
+    {
+      "id": "prop-plot-sign",
+      "name": "Workshop Plot Sign",
+      "category": "workshop-prop",
+      "priority": "critical",
+      "use": "Owner name and rank sign at each plot entrance.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 600,
+        "min": 300,
+        "max": 1000
+      },
+      "prompt": "A hanging wooden workshop sign on an iron bracket post with a crossed-hammers emblem and a blank center board. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Blank board for a SurfaceGui name."
+    },
+    {
+      "id": "prop-workbench",
+      "name": "Workbench",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "Plot dressing beside the forge.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 900,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A sturdy wooden blacksmith workbench with a vise, scattered tongs and chisels and a lower shelf of tools. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-coal-pile",
+      "name": "Coal Pile",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "Fuel pile beside furnaces.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 800
+      },
+      "prompt": "A heaped pile of chunky black coal lumps with a few glowing embers and a small shovel stuck in it. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-ore-cart",
+      "name": "Ore Cart",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "Next to extractors; the ore load is tinted by the selected material.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 900,
+        "min": 500,
+        "max": 1000
+      },
+      "prompt": "A small wooden mine cart on iron wheels filled with chunky ore rocks. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Ore load as a separate part for material tinting."
+    },
+    {
+      "id": "prop-barrel",
+      "name": "Barrel",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "General clutter.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 700
+      },
+      "prompt": "A stout wooden barrel with two iron bands and a slightly domed lid. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-crate-stack",
+      "name": "Crate Stack",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "General clutter and material storage overflow.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 500,
+        "min": 250,
+        "max": 800
+      },
+      "prompt": "A stack of three wooden supply crates with iron corner brackets and stenciled hammer marks. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-lantern",
+      "name": "Wall Lantern",
+      "category": "workshop-prop",
+      "priority": "important",
+      "use": "Lighting fixture on plots and hub.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 300,
+        "min": 250,
+        "max": 600
+      },
+      "prompt": "A hanging iron wall lantern with a curled bracket, a glass housing and a warm glowing flame. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Glass and flame as separate parts for a PointLight."
+    },
+    {
+      "id": "prop-tool-rack",
+      "name": "Tool Rack",
+      "category": "workshop-prop",
+      "priority": "nice-to-have",
+      "use": "Wall dressing near the anvil.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A wooden wall tool rack holding tongs, hammers and a file in a neat row. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-grindstone",
+      "name": "Grindstone",
+      "category": "workshop-prop",
+      "priority": "nice-to-have",
+      "use": "Plot dressing.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A pedal-driven sharpening grindstone with a round stone wheel on a wooden frame. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-water-bucket",
+      "name": "Water Bucket",
+      "category": "workshop-prop",
+      "priority": "nice-to-have",
+      "use": "Small clutter near the quench trough.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 300,
+        "min": 250,
+        "max": 500
+      },
+      "prompt": "A wooden water bucket with iron bands and a rope handle. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-weapon-barrel",
+      "name": "Barrel of Blades",
+      "category": "workshop-prop",
+      "priority": "nice-to-have",
+      "use": "Clutter showing unsold stock.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 700,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A wooden barrel holding several plain swords and axes standing hilt-up. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "prop-chain-hoist",
+      "name": "Chain Hoist",
+      "category": "workshop-prop",
+      "priority": "nice-to-have",
+      "use": "Ceiling dressing above machines.",
+      "reuse": "Repeated on every plot; tint variants only.",
+      "polycount": {
+        "target": 700,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A ceiling chain hoist with a pulley block, a heavy hook and a looped iron chain. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "hub-leaderboard-board",
+      "name": "Leaderboard Board",
+      "category": "hub-prop",
+      "priority": "critical",
+      "use": "Physical Hall of Blacksmiths board, one per metric: lifetime wealth, weapons forged, evolutions, highest weapon value.",
+      "reuse": "One mesh used 4 times; the crest gem color and a SurfaceGui title distinguish each metric.",
+      "polycount": {
+        "target": 2000,
+        "min": 1000,
+        "max": 3000
+      },
+      "prompt": "A tall wooden-and-iron leaderboard board frame with a crossed-hammers crest on top, a large blank center panel and lantern brackets on each side. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Blank panel sized for a SurfaceGui list; test legibility from the hub floor."
+    },
+    {
+      "id": "hub-champion-statue",
+      "name": "Champion Statue",
+      "category": "hub-prop",
+      "priority": "important",
+      "use": "Statue beside the boards honoring the top blacksmith.",
+      "reuse": "Single mesh; the current #1's name appears on a SurfaceGui plaque.",
+      "polycount": {
+        "target": 5000,
+        "min": 4000,
+        "max": 6000
+      },
+      "prompt": "A heroic statue of a stylized blocky blacksmith raising a hammer above an anvil on a stepped stone plinth, cast in polished bronze. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Optional later swap to a live avatar rig of the top player."
+    },
+    {
+      "id": "hub-podium",
+      "name": "Top Three Podium",
+      "category": "hub-prop",
+      "priority": "nice-to-have",
+      "use": "Server ranking podium for the current server's top three.",
+      "reuse": "Single mesh.",
+      "polycount": {
+        "target": 1200,
+        "min": 600,
+        "max": 2000
+      },
+      "prompt": "A three-step winners podium of carved stone with gold, silver and bronze trim and engraved anvil emblems. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "hub-masterpiece-bell",
+      "name": "Masterpiece Bell",
+      "category": "hub-prop",
+      "priority": "nice-to-have",
+      "use": "Rings for rate-limited server announcements of exceptional forges.",
+      "reuse": "Single mesh; clapper as a separate part.",
+      "polycount": {
+        "target": 2500,
+        "min": 1500,
+        "max": 3500
+      },
+      "prompt": "A large bronze announcement bell hanging in a timber frame with a hammer striker and engraved rune bands. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "hub-lamp-post",
+      "name": "Hub Lamp Post",
+      "category": "hub-prop",
+      "priority": "important",
+      "use": "Hub lighting.",
+      "reuse": "Repeated throughout the hub.",
+      "polycount": {
+        "target": 500,
+        "min": 250,
+        "max": 800
+      },
+      "prompt": "A wrought-iron street lamp post with a curled top and a warm glowing lantern. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "hub-banner-pole",
+      "name": "Banner Pole",
+      "category": "hub-prop",
+      "priority": "nice-to-have",
+      "use": "Hub dressing with guild-free decorative banners.",
+      "reuse": "Repeated; banner cloth is a decal-friendly flat part.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 700
+      },
+      "prompt": "A tall iron banner pole with a crossbar, a hanging cloth banner and a small hammer finial. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "hub-bench",
+      "name": "Hub Bench",
+      "category": "hub-prop",
+      "priority": "nice-to-have",
+      "use": "Hub seating.",
+      "reuse": "Repeated.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 700
+      },
+      "prompt": "A sturdy wooden bench with iron armrests shaped like curled tongs. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "set-great-forge",
+      "name": "Great Hub Forge",
+      "category": "signature-set-piece",
+      "priority": "important",
+      "use": "Central hub landmark and spawn focal point; can host the hatch station and showcase announcements.",
+      "reuse": "Unique; per-season decoration via attachments.",
+      "polycount": {
+        "target": 9000,
+        "min": 6000,
+        "max": 10000
+      },
+      "prompt": "A colossal central great forge with a towering chimney, a ring of four glowing hearths, giant chained bellows and a huge anvil at its heart. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Split into modules (base, hearths, chimney) so it stays under the per-MeshPart limit and streams well."
+    },
+    {
+      "id": "set-hall-of-blacksmiths-arch",
+      "name": "Hall of Blacksmiths Arch",
+      "category": "signature-set-piece",
+      "priority": "important",
+      "use": "Entrance arch framing the leaderboard hall.",
+      "reuse": "Unique.",
+      "polycount": {
+        "target": 8000,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A grand entrance arch of carved stone and bronze with giant crossed hammers above, anvil-shaped pillars and glowing forge braziers on each side. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Title lettering added in Studio as SurfaceGui or decal."
+    },
+    {
+      "id": "set-evolution-crucible",
+      "name": "Evolution Crucible",
+      "category": "signature-set-piece",
+      "priority": "important",
+      "use": "Interactable Blacksmith Evolution altar where players preview and confirm evolution.",
+      "reuse": "Unique; normal and protected evolution share it with different VFX colors.",
+      "polycount": {
+        "target": 7000,
+        "min": 5000,
+        "max": 10000
+      },
+      "prompt": "A towering evolution crucible altar of dark stone and gold holding a giant floating molten orb wrapped in rotating rune rings, with steps leading up to it. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Orb and rings as separate parts for rotation."
+    },
+    {
+      "id": "set-masterpiece-pedestal",
+      "name": "Masterpiece Pedestal",
+      "category": "signature-set-piece",
+      "priority": "important",
+      "use": "Plot centerpiece for the owner's best Legendary/Mythic weapon.",
+      "reuse": "One per plot; rarity crystals recolor.",
+      "polycount": {
+        "target": 4500,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A grand masterpiece pedestal of carved stone and gold with a floating weapon cradle, a glowing rune ring and rarity crystal sockets. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Weapon attachment above the cradle for a slow spin."
+    },
+    {
+      "id": "set-vip-workshop-gate",
+      "name": "VIP Workshop Gate",
+      "category": "signature-set-piece",
+      "priority": "nice-to-have",
+      "use": "Entrance to VIP workshop plots or the VIP area (layout OPEN).",
+      "reuse": "Unique; pairs with the VIP Gilded Smelter.",
+      "polycount": {
+        "target": 5000,
+        "min": 4000,
+        "max": 7000
+      },
+      "prompt": "A premium VIP workshop gate with tall golden doors, a crowned anvil emblem, velvet banners and glowing gem lanterns. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Doors as separate parts for opening."
+    },
+    {
+      "id": "ui-material-ingot",
+      "name": "Material Ingot",
+      "category": "ui-display",
+      "priority": "critical",
+      "use": "Material icon in ViewportFrames, storage stacks, ingot pours and sell/pickup effects.",
+      "reuse": "One mesh for all 32 materials via color, material and era emissive.",
+      "polycount": {
+        "target": 300,
+        "min": 250,
+        "max": 600
+      },
+      "prompt": "A single chunky trapezoid metal ingot with beveled edges and a stamped hammer mark, in neutral light-gray metal ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "The most reused mesh in the game; keep it very light."
+    },
+    {
+      "id": "ui-raw-ore-chunk",
+      "name": "Raw Ore Chunk",
+      "category": "ui-display",
+      "priority": "critical",
+      "use": "Raw ore in extractor chutes, ore carts and material selection UI.",
+      "reuse": "One mesh for all 32 ores; crystal veins tinted per material.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 800
+      },
+      "prompt": "A single faceted raw ore chunk of gray rock with protruding metallic crystal veins in neutral light gray ready for in-engine recoloring. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Veins as a separate part or material slot for tinting."
+    },
+    {
+      "id": "ui-reveal-turntable",
+      "name": "Forge Reveal Turntable",
+      "category": "ui-display",
+      "priority": "critical",
+      "use": "Stage for the post-quench reveal of every forged weapon.",
+      "reuse": "Single mesh; rune ring color follows the rolled rarity.",
+      "polycount": {
+        "target": 2500,
+        "min": 1500,
+        "max": 4000
+      },
+      "prompt": "A circular forge reveal turntable of dark stone with a brass rim, a glowing rarity rune ring and four small spark emitter nozzles. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Rune ring as a separate emissive part."
+    },
+    {
+      "id": "ui-hot-billet",
+      "name": "Hot Billet Blank",
+      "category": "ui-display",
+      "priority": "important",
+      "use": "Glowing unforged blank on the anvil during the strike minigame.",
+      "reuse": "One mesh for all classes and materials; glow is material/emissive.",
+      "polycount": {
+        "target": 400,
+        "min": 250,
+        "max": 800
+      },
+      "prompt": "A glowing hot metal billet blank with rounded ends and a cooling dark crust. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "ui-coin",
+      "name": "Forge Coin",
+      "category": "ui-display",
+      "priority": "important",
+      "use": "Coin burst when selling, currency icon in ViewportFrames.",
+      "reuse": "One mesh, instanced in bursts.",
+      "polycount": {
+        "target": 250,
+        "min": 250,
+        "max": 500
+      },
+      "prompt": "A single thick gold coin stamped with crossed hammers over an anvil, with a raised rim. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": "Keep at the floor of the budget since it is spawned in bursts."
+    },
+    {
+      "id": "ui-coin-pile",
+      "name": "Coin Pile",
+      "category": "ui-display",
+      "priority": "nice-to-have",
+      "use": "Sell counter and wealth leaderboard decoration.",
+      "reuse": "Single mesh.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A heaped pile of thick gold coins stamped with crossed hammers, with a few coins standing on edge. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    },
+    {
+      "id": "ui-evolution-charm",
+      "name": "Evolution Ward Charm",
+      "category": "ui-display",
+      "priority": "nice-to-have",
+      "use": "3D icon for the protected-evolution entitlement in the evolution preview UI.",
+      "reuse": "Single mesh.",
+      "polycount": {
+        "target": 800,
+        "min": 400,
+        "max": 1000
+      },
+      "prompt": "A protective ward charm shaped like a small shield with a glowing crucible emblem and a gold rim. Stylized fantasy-industrial blacksmithing asset for a Roblox simulator with a chunky readable silhouette, slightly exaggerated proportions, clean low-to-mid poly forms, bold hand-painted materials and subtle magical glow, no photorealism and no gritty PBR detail.",
+      "notes": null
+    }
+  ]
+}

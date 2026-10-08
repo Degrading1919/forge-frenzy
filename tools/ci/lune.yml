@@ -1,0 +1,22 @@
+# Ready-to-enable GitHub Actions workflow. Copy to .github/workflows/lune.yml (pushing workflow files
+# needs a GitHub token with the "workflow" scope: gh auth refresh -s workflow).
+name: Lune tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lune 0.10.5
+        run: |
+          curl -fsSL -o lune.zip https://github.com/lune-org/lune/releases/download/v0.10.5/lune-0.10.5-linux-x86_64.zip
+          unzip -q lune.zip -d "$HOME/lune"
+          chmod +x "$HOME/lune/lune"
+          echo "$HOME/lune" >> "$GITHUB_PATH"
+      - name: Run the Lune suite (shared rules and server services, no Roblox Studio)
+        run: lune run tools/lune/run-tests.luau

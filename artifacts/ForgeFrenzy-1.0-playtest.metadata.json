@@ -1,0 +1,537 @@
+{
+  "httpEnabledBefore": false,
+  "gameAttributes": [],
+  "serviceSettings": {
+    "ServerStorage": [],
+    "StarterPlayer": {
+      "CharacterJumpHeight": 7.199999809265137,
+      "CharacterJumpPower": 50,
+      "CameraMode": "Enum.CameraMode.Classic",
+      "CameraMinZoomDistance": 0.5,
+      "CharacterUseJumpPower": false,
+      "DevTouchMovementMode": "Enum.DevTouchMovementMode.UserChoice",
+      "EnableMouseLockOption": true,
+      "CharacterWalkSpeed": 16,
+      "DevComputerMovementMode": "Enum.DevComputerMovementMode.UserChoice",
+      "CameraMaxZoomDistance": 128
+    },
+    "Workspace": {
+      "AirDensity": 0.0012000000569969416,
+      "GlobalWind": {
+        "y": 0,
+        "type": "Vector3",
+        "x": 0,
+        "z": 0
+      },
+      "Gravity": 196.1999969482422,
+      "StreamingEnabled": true,
+      "FallenPartsDestroyHeight": -500
+    },
+    "StarterGui": {
+      "ScreenOrientation": "Enum.ScreenOrientation.Sensor",
+      "ResetPlayerGuiOnSpawn": true
+    },
+    "Lighting": {
+      "ExposureCompensation": 0,
+      "ColorShift_Bottom": {
+        "b": 0,
+        "type": "Color3",
+        "g": 0,
+        "r": 0
+      },
+      "FogColor": {
+        "b": 0.7529412508010864,
+        "type": "Color3",
+        "g": 0.7529412508010864,
+        "r": 0.7529412508010864
+      },
+      "FogEnd": 100000,
+      "ShadowSoftness": 0.20000000298023224,
+      "GlobalShadows": true,
+      "EnvironmentSpecularScale": 0.6000000238418579,
+      "GeographicLatitude": 0,
+      "FogStart": 0,
+      "Ambient": {
+        "b": 0.21960784494876862,
+        "type": "Color3",
+        "g": 0.23529411852359772,
+        "r": 0.27450981736183167
+      },
+      "OutdoorAmbient": {
+        "b": 0.4627451002597809,
+        "type": "Color3",
+        "g": 0.501960813999176,
+        "r": 0.5490196347236633
+      },
+      "ClockTime": 15.199999809265137,
+      "Brightness": 2.4000000953674316,
+      "ColorShift_Top": {
+        "b": 0,
+        "type": "Color3",
+        "g": 0,
+        "r": 0
+      },
+      "EnvironmentDiffuseScale": 0.6000000238418579
+    },
+    "ServerScriptService": [],
+    "SoundService": {
+      "AmbientReverb": "Enum.ReverbType.NoReverb",
+      "RolloffScale": 1,
+      "DopplerScale": 1,
+      "RespectFilteringEnabled": true,
+      "DistanceFactor": 3.3299999237060547
+    },
+    "ReplicatedStorage": []
+  },
+  "exportId": "3dfb4add-0efa-46f1-93dc-b995813189b7",
+  "exportedAtUtc": "2026-10-08T02:11:16Z",
+  "scripts": [
+    {
+      "bytes": 8891,
+      "path": "ReplicatedStorage.Shared.Config.Balance",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 7117,
+      "path": "ReplicatedStorage.Shared.Config.Companions",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 3545,
+      "path": "ReplicatedStorage.Shared.Config.Eggs",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2718,
+      "path": "ReplicatedStorage.Shared.Config.Evolution",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8004,
+      "path": "ReplicatedStorage.Shared.Config.Materials",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4448,
+      "path": "ReplicatedStorage.Shared.Config.Products",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 972,
+      "path": "ReplicatedStorage.Shared.Config.Sounds",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 21328,
+      "path": "ReplicatedStorage.Shared.Economy",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 12609,
+      "path": "ReplicatedStorage.Shared.ForgeMath",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2538,
+      "path": "ReplicatedStorage.Shared.Protocol",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 3454,
+      "path": "ReplicatedStorage.Shared.Visuals.EggModels",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 26510,
+      "path": "ReplicatedStorage.Shared.Visuals.PetModels",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 23095,
+      "path": "ReplicatedStorage.Shared.Visuals.WeaponModels",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 1183,
+      "path": "ServerScriptService.Server.Main",
+      "class": "Script"
+    },
+    {
+      "bytes": 6692,
+      "path": "ServerScriptService.Server.Net.Plots",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 20943,
+      "path": "ServerScriptService.Server.Net.Remotes",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 64654,
+      "path": "ServerScriptService.Server.Packages.ProfileStore",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 14129,
+      "path": "ServerScriptService.Server.Services.CompanionService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 11003,
+      "path": "ServerScriptService.Server.Services.DataService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8923,
+      "path": "ServerScriptService.Server.Services.EvolutionService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 13165,
+      "path": "ServerScriptService.Server.Services.ForgeService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 11770,
+      "path": "ServerScriptService.Server.Services.LeaderboardService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 14839,
+      "path": "ServerScriptService.Server.Services.MonetizationService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 5193,
+      "path": "ServerScriptService.Server.Services.ProductionService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2289,
+      "path": "ServerScriptService.Server.Services.UpgradeService",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 11341,
+      "path": "ServerScriptService.Server.Tests.CompanionService.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 7878,
+      "path": "ServerScriptService.Server.Tests.CoreServices.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 9604,
+      "path": "ServerScriptService.Server.Tests.DataService.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 16394,
+      "path": "ServerScriptService.Server.Tests.Economy.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8776,
+      "path": "ServerScriptService.Server.Tests.EvolutionService.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8290,
+      "path": "ServerScriptService.Server.Tests.ForgeMath.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8860,
+      "path": "ServerScriptService.Server.Tests.LeaderboardService.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 10989,
+      "path": "ServerScriptService.Server.Tests.MonetizationService.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 11665,
+      "path": "ServerScriptService.Server.Tests.MultiForge.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 7904,
+      "path": "ServerScriptService.Server.Tests.MultiplayerAcceptance",
+      "class": "Script"
+    },
+    {
+      "bytes": 2142,
+      "path": "ServerScriptService.Server.Tests.Plots.spec",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2232,
+      "path": "ServerStorage.Build.DevSync",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 1610,
+      "path": "ServerStorage.Build.RunSpecs",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4181,
+      "path": "ServerStorage.Build.TestLeaderboards",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4146,
+      "path": "ServerStorage.Build.TestPersistence",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 29683,
+      "path": "ServerStorage.Build.WorldBuilder",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 9429,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIEvolution",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 12314,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIForge",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 9614,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIHud",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 12901,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIInventory",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 5691,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIMaterials",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 6605,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIOdds",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 13972,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIPets",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 3382,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UISettings",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4898,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIShop",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 601,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIToast",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4328,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.UIWorkshop",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 5220,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldBoards",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 10960,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldForge",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 12537,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldMachines",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 8089,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldOnboarding",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2727,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldOwner",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 3979,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldPets",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 5089,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldPrompts",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 3923,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldShowcase",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 5019,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldUtil.Common",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 2510,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldUtil.Sfx",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 1819,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Controllers.WorldUtil.WeaponDisplay",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 943,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Main",
+      "class": "LocalScript"
+    },
+    {
+      "bytes": 1049,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.Net",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 774,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.State",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 7120,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Data",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 13200,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.ForgeGame",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 12091,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.ForgeReveal",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 931,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.ForgeSignals",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 1511,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Format",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 6931,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Panels",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 7922,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Theme",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4851,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Toast",
+      "class": "ModuleScript"
+    },
+    {
+      "bytes": 4777,
+      "path": "StarterPlayer.StarterPlayerScripts.Client.UI.Viewport",
+      "class": "ModuleScript"
+    }
+  ],
+  "format": "rbxm-service-containers",
+  "limitations": [
+    "Not a full .rbxl place; import container children into their corresponding services.",
+    "Terrain, Camera and temporary test/save instances are excluded.",
+    "Service properties, place settings, cloud configuration and player data are not part of the model; selected settings are recorded here."
+  ],
+  "creatorId": 2336519728,
+  "totalParts": 2,
+  "scriptCount": 75,
+  "totalBytes": 318633,
+  "worldDescendants": 1489,
+  "descendantCount": 1592,
+  "verifiedUnparentedRoundTrip": true,
+  "placeVersion": 2,
+  "maxPlayers": 60,
+  "placeId": 80574227639803,
+  "sourceMode": "Edit",
+  "excluded": [
+    "Workspace.Terrain",
+    "Workspace.Camera"
+  ],
+  "containers": [
+    {
+      "descendants": 1490,
+      "name": "Workspace",
+      "children": 1
+    },
+    {
+      "descendants": 16,
+      "name": "ReplicatedStorage",
+      "children": 1
+    },
+    {
+      "descendants": 28,
+      "name": "ServerScriptService",
+      "children": 1
+    },
+    {
+      "descendants": 6,
+      "name": "ServerStorage",
+      "children": 1
+    },
+    {
+      "descendants": 40,
+      "name": "StarterPlayer",
+      "children": 2
+    },
+    {
+      "descendants": 0,
+      "name": "StarterGui",
+      "children": 0
+    },
+    {
+      "descendants": 4,
+      "name": "Lighting",
+      "children": 4
+    },
+    {
+      "descendants": 0,
+      "name": "SoundService",
+      "children": 0
+    }
+  ],
+  "gameId": 10769806075,
+  "creatorType": "Enum.CreatorType.User",
+  "modelFile": "ForgeFrenzy-1.0-playtest.rbxm",
+  "sha256": "f9045088b06a9801a6ea6828989735590ecdf18ee05d73f9df31fe2dae20ec50",
+  "assembledAtUtc": "2026-10-08T02:11:33.027549+00:00",
+  "exportPartFiles": [
+    "studio-export-20261008T021116210651Z.json",
+    "studio-export-20261008T021116250938Z.json"
+  ]
+}

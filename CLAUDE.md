@@ -1,20 +1,38 @@
 # Claude guidance — Forge Frenzy
 
-You are working on **Forge Frenzy**, a Roblox incremental blacksmithing simulator. This repository is currently the source of truth for design; **do not assume any gameplay code, Roblox place or asset exists** until inspected.
+You are working on **Forge Frenzy**, a playable Roblox incremental blacksmithing game. **`main` is the authoritative branch.** Branch from it for new work and merge back through PRs. Continue the existing architecture and game rather than rebuilding it.
+
+Source is the durable implementation truth. The live Studio place is synchronized from source with `tools/devsync.py` and `ServerStorage.Build.DevSync`. Inspect and back up live Studio content before replacing objects, and never run `WorldBuilder.build()` blindly; it backs the World up to `ServerStorage.Backups`, but the hand-placed world is the authority.
+
+**Status:** v2, ready for owner playtests, with purchases and publishing disabled.
+
+Start with [README.md](README.md) and [docs/README.md](docs/README.md), which separates current documents from historical ones. The current direction is in:
+
+- [docs/21](docs/21_OWNER_PLAYTEST_REMEDIATION.md): owner direction;
+- [docs/22](docs/22_REMEDIATION_DESIGN.md): design and world contract;
+- [docs/23](docs/23_ECONOMY_V2.md): the economy curve;
+- [docs/25](docs/25_REVIEW_REMEDIATION.md): the stealing rules, steal ledger, station authority, current verification and remaining human checks.
+
+## Accepted owner decisions (do not reopen)
+
+- Stolen weapons keep their **full resale value**, whatever the thief's progress.
+- Steal hold time follows weapon value: **2–8 s** on the shared log curve in `src/shared/Steal.luau`, enforced by the server.
+- About **500 hours** of ordinary free automated progression reach the final metal. Stealing strategies may shortcut it.
+- Weapons you forged above your current metal sell like your best metal until you reach it again. This stops the evolve-then-sell shortcut.
+- Keep workshop expansion, stealing, Forge Lock, passive display income and the monetization safeguards.
+- No real purchases, no publishing and no paid asset generation without the owner's explicit approval.
 
 ## Project mission
 
 Build a fun, complete, playable, visually polished *blacksmithing-first* incremental experience. Automatic machines supply selectable materials; players actively forge chosen weapon types through a click-speed/luck minigame; randomized quality/rarity/design/traits create valuable collectible weapons; money improves production/gear/pets; evolution and social leaderboards provide long-term goals. Scope must remain narrow with deep progression; do not turn this into a combat RPG or a large engineering framework.
 
-Read [README.md](README.md), then the design documents in `docs/`, starting with [vision and core loop](docs/01_VISION_AND_CORE_LOOP.md), including the [decision log](docs/11_DECISIONS_AND_OPEN_QUESTIONS.md), [balance plan](docs/12_ECONOMY_AND_BALANCE.md), and [prototype balance v0](docs/13_PLAYTEST_BALANCE_V0.md). The proposed machine-readable starting point is [design/balance-v0.json](design/balance-v0.json), and the [Claude build mission](docs/14_CLAUDE_BUILD_MISSION.md) is available when orchestration begins.
-
 ## Autonomy and tasking
 
-- User intends to use Claude Desktop projects/threads with an orchestrating agent, possibly for one long initiating development session. **Do not artificially stop at scaffolds, TODOs, plans, or milestones**; continue toward an integrated playable game when an execution environment and permission exist.
+- **Do not artificially stop at scaffolds, TODOs, plans, or milestones.** Carry work through to an integrated, verified change when an execution environment and permission exist.
 - Keep a compact mission prompt. Durable context belongs here and in the docs; do not re-read/restate everything every turn.
 - **LOCKED** means an agreed direction. **PLANNED** means a desired feature with unapproved specifics. **PROPOSED** means tentative numbers/designs. **OPEN** means requires judgment, test, or owner decision. Honor locked direction; make reversible engineering decisions where possible. Escalate only real blockers, irreversible changes, and money/publication decisions.
 - Optimize **accepted playable features per Claude usage**, not the number of agents/messages. Model routing is provisional: Opus-class high reasoning for design/integration/review; Sonnet-class for bounded production work; inexpensive search/explore agents for discovery. Check which models/effort options are actually available in the installed Claude product.
-- Separate independent work across branches or isolated file sets. A **single integration owner** controls shared Studio instance / shared game hierarchy, Git integration and authoritative service contracts.
+- One integration owner controls the shared Studio place and merges into `main`. Keep feature branches short-lived and delete them after merging.
 - Record implemented features and verification evidence. Never claim an unfinished system is complete.
 
 ## Reuse-first workflow
@@ -38,6 +56,6 @@ Tripo3D is available for distinctive meshes. Standard weapons share mesh models 
 
 ## Verification
 
-Run deterministic economy/RNG tests, Luau type/lint checks, save/reload and multi-client playtests. Verify forged weapon values remain in the chosen material range; rate limit spoofed client clicks; receipts and evolution are idempotent; assets and UI work on mobile. Measure and inspect real screenshots/interaction, not just green unit tests. Do not perform live Robux transactions, publish a commercial experience, or incur paid Tripo generation without explicit authorization.
+Run `lune run tools/lune/run-tests.luau`; a CI workflow is ready at `tools/ci/lune.yml`. For Studio work, also run `RunSpecs`, `TestPersistence`, `TestStealRecovery` and the two-client acceptance; the commands are in README. Check save/reload and multi-client behavior. Verify forged weapon values remain in the chosen material range; rate limit spoofed client clicks; receipts and evolution are idempotent; assets and UI work on mobile. Measure and inspect real screenshots/interaction, not just green unit tests. Do not perform live Robux transactions, publish a commercial experience, or incur paid Tripo generation without explicit authorization.
 
-Read [docs/10_BUILD_AND_ACCEPTANCE.md](docs/10_BUILD_AND_ACCEPTANCE.md) before reporting completion.
+Record evidence the way [docs/25](docs/25_REVIEW_REMEDIATION.md) does. Separate what was verified in real Studio, what was mocked or simulated, and what still needs a human.

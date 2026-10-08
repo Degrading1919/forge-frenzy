@@ -1,6 +1,10 @@
 # Cross-agent project instructions
 
-Repository: **Degrading1919/forge-frenzy**. Status at documentation bootstrap: design only. Read `README.md`, `CLAUDE.md` and relevant docs before tasking.
+Repository: **Degrading1919/forge-frenzy**.
+
+- **Status:** a playable v2 implementation on `main`, which is the authoritative branch.
+- **Before tasking:** read `README.md`, `CLAUDE.md` (including its accepted owner decisions) and `docs/README.md`.
+- **Before merging:** run `lune run tools/lune/run-tests.luau`. The workflow in `tools/ci/lune.yml` is ready to enable.
 
 ## Authority boundaries
 - Game behavior: authoritative server services/config; clients only request actions and render.
@@ -10,7 +14,7 @@ Repository: **Degrading1919/forge-frenzy**. Status at documentation bootstrap: d
 - Preserve game scope. No Adventurer's Rise code or architecture imported unless inspected, licensed/owned and demonstrably helpful.
 
 ## Agent responsibilities
-- **Orchestrator:** read scope, prioritize vertical slice, partition bounded work, resolve interfaces, own integration and acceptance.
+- **Integration owner:** owns the Studio place, merges to `main`, and runs the Studio acceptance (README) before claiming a change works in game.
 - **Code workers:** implement independently testable modules following agreed contracts; small files/commits, avoid overlapping edits.
 - **Asset/Studio worker:** ensure visual implementation, import, optimize and test assets, with one writer controlling Studio at a time.
 - **Independent reviewer:** test duplication exploits, cross-service state, bad chance math, performance, mobile and purchase policies.
