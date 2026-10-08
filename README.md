@@ -1,11 +1,11 @@
 # Forge Frenzy
 
-**Status: 1.0 build ready for the owner's full playtest. Purchases and publishing disabled.**
+**Status: v2 owner-playtest remediation build, ready for the next owner playtest. Purchases and publishing disabled.**
 
 **Last consolidated: October 7, 2026.**  
 **Project:** Roblox incremental blacksmithing game, separate from Adventurer's Rise.
 
-The existing implementation is on `studio-integration` ([PR #5](https://github.com/Degrading1919/forge-frenzy/pull/5)); `main` retains the original design documentation. The open Studio experience is synchronized: press Play for the free-player loop and use Shop test grants to exercise premium features without Robux. See [playtest evidence and guide](docs/19_PLAYTEST_EVIDENCE.md), [balance evidence](docs/20_BALANCE_PLAYTEST.md), and the [recoverable service-container model](artifacts/ForgeFrenzy-1.0-playtest.rbxm). Preserve this implementation and existing Studio content when continuing work.
+The existing implementation is on `studio-integration` ([PR #5](https://github.com/Degrading1919/forge-frenzy/pull/5)); `main` retains the original design documentation. The open Studio experience is synchronized: press Play for the free-player loop and use Shop test grants to exercise premium features without Robux. The October 8 remediation rebuilt the UI, world, economy and social systems: see [remediation design and status](docs/22_REMEDIATION_DESIGN.md), [economy v2 evidence](docs/23_ECONOMY_V2.md) and [v2 verification](docs/24_V2_VERIFICATION.md). Earlier: [1.0 playtest evidence](docs/19_PLAYTEST_EVIDENCE.md), [balance evidence](docs/20_BALANCE_PLAYTEST.md), and the [recoverable service-container model](artifacts/ForgeFrenzy-1.0-playtest.rbxm). Preserve this implementation and existing Studio content when continuing work.
 
 ## Pitch
 

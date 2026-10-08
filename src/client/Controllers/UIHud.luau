@@ -58,7 +58,7 @@ local function build()
 	ui.pill = pill
 	ui.pillScale = Instance.new("UIScale")
 	ui.pillScale.Parent = pill
-	ui.income = Theme.chip("+$0/s", Theme.shade(C.panel, -0.1), { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 72), Size = UDim2.fromOffset(170, 30), TextSize = 19, Parent = top })
+	ui.income = Theme.chip("+$0/s", Theme.shade(C.panel, -0.1), { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 72), Size = UDim2.fromOffset(260, 30), TextScaled = true, Parent = top })
 
 	-- Right column.
 	local side = Theme.make("Frame", {

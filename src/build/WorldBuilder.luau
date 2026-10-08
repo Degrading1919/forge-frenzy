@@ -660,7 +660,9 @@ local function buildHub(world: Instance)
 	end
 	buildSellBooth(hub)
 
-	-- Leaderboards on the north-west arc, facing the booth.
+	-- Hub stations sit between the workshop paths (paths run at 30, 90, ... 330 degrees), so
+	-- every workshop has a clear run to the sell booth.
+	-- Leaderboards: two at 0 degrees, two at 180 degrees, facing the booth.
 	local hall = make("Folder", { Name = "HallOfBlacksmiths" }, hub)
 	local boards = {
 		{ "Board_Wealth", "lifetimeCoins", "RICHEST", rgb(70, 200, 90) },
@@ -669,7 +671,7 @@ local function buildHub(world: Instance)
 		{ "Board_Highest", "highestWeaponValue", "BEST WEAPON", rgb(255, 80, 120) },
 	}
 	for i, b in boards do
-		local angle = math.rad(-54 + (i - 1) * 18)
+		local angle = math.rad(({ -7, 7, 173, 187 })[i])
 		local cf = CFrame.Angles(0, angle, 0) * CFrame.new(0, 1, -(R - 5))
 		cf = CFrame.lookAt(cf.Position, Vector3.new(0, 1, 0))
 		buildBoard(hall, b[1], b[2], b[3], cf, b[4])
@@ -686,12 +688,12 @@ local function buildHub(world: Instance)
 		{ "primordial", "PRIMORDIAL", rgb(255, 230, 150) },
 	}
 	for i, e in eggs do
-		local angle = math.rad(60 + (i - 1) * 12)
+		local angle = math.rad(60 + (i - 3.5) * 5)
 		local cf = CFrame.Angles(0, angle, 0) * CFrame.new(0, 1, -(R - 7))
 		cf = CFrame.lookAt(cf.Position, Vector3.new(0, 1, 0))
 		buildEggStand(hatch, e[1], e[2], e[3], cf)
 	end
-	local archCf = CFrame.lookAt((CFrame.Angles(0, math.rad(90), 0) * CFrame.new(0, 0, -(R - 2))).Position, Vector3.new(0, 0, 0))
+	local archCf = CFrame.lookAt((CFrame.Angles(0, math.rad(60), 0) * CFrame.new(0, 0, -(R - 2))).Position, Vector3.new(0, 0, 0))
 	local arch = part(hatch, "HatcherySign", Vector3.new(18, 3, 0.6), archCf * CFrame.new(0, 12, 0), rgb(255, 120, 200), Enum.Material.SmoothPlastic)
 	label(arch, Enum.NormalId.Front, "PET EGGS", Color3.new(1, 1, 1))
 	for _, x in { -9.5, 9.5 } do
@@ -700,7 +702,7 @@ local function buildHub(world: Instance)
 
 	-- Evolution altar to the south-east.
 	local evo = model(hub, "EvolutionAltar")
-	local evoCf = CFrame.lookAt((CFrame.Angles(0, math.rad(150), 0) * CFrame.new(0, 0, -(R - 9))).Position, Vector3.new(0, 0, 0))
+	local evoCf = CFrame.lookAt((CFrame.Angles(0, math.rad(120), 0) * CFrame.new(0, 0, -(R - 9))).Position, Vector3.new(0, 0, 0))
 	local evoBase = part(evo, "Base", Vector3.new(12, 1.4, 12), evoCf * CFrame.new(0, 1, 0), C.stoneDark, Enum.Material.Marble)
 	evo.PrimaryPart = evoBase
 	for i = 0, 5 do
@@ -716,7 +718,7 @@ local function buildHub(world: Instance)
 
 	-- Premium/test shop stall to the south-west.
 	local shop = model(hub, "MerchantStall")
-	local shopCf = CFrame.lookAt((CFrame.Angles(0, math.rad(210), 0) * CFrame.new(0, 0, -(R - 8))).Position, Vector3.new(0, 0, 0))
+	local shopCf = CFrame.lookAt((CFrame.Angles(0, math.rad(240), 0) * CFrame.new(0, 0, -(R - 8))).Position, Vector3.new(0, 0, 0))
 	local counter = part(shop, "Counter", Vector3.new(11, 3.5, 3), shopCf * CFrame.new(0, 2.75, 0), C.wood, Enum.Material.WoodPlanks)
 	shop.PrimaryPart = counter
 	for _, x in { -5, 5 } do
