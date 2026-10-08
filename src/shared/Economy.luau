@@ -92,10 +92,10 @@ function Economy.newProfile(): Profile
 end
 
 local function nonNegativeInt(value: any, fallback: number): number
-	if type(value) ~= "number" or value ~= value or value < 0 then
+	if type(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
 		return fallback
 	end
-	return math.floor(value)
+	return math.min(Balance.maxSafeInteger, math.floor(value))
 end
 
 local function denseCounts(value: any, length: number): { number }
@@ -132,6 +132,12 @@ function Economy.reconcile(p: Profile): Profile
 	if type(p.progress) ~= "table" then
 		p.progress = { ore = 0, smelt = 0 }
 	end
+	for _, key in { "ore", "smelt" } do
+		local value = p.progress[key]
+		p.progress[key] = if type(value) == "number" and value == value and value < math.huge then math.clamp(value, 0, 1) else 0
+	end
+	if type(p.levels) ~= "table" then p.levels = {} end
+	if type(p.gear) ~= "table" then p.gear = {} end
 	for _, group in { { p.levels, Balance.machineTracks }, { p.gear, Balance.gearTracks } } do
 		local levels, names = group[1], group[2]
 		for _, name in names do
@@ -140,6 +146,26 @@ function Economy.reconcile(p: Profile): Profile
 	end
 	if type(p.weapons) ~= "table" then
 		p.weapons = {}
+	end
+	if p.pending ~= nil and type(p.pending) ~= "table" then p.pending = nil end
+	-- Older saves may contain weapons without the serial field. Recover it from IDs so a
+	-- fresh forge can never overwrite retained equipment. Valid records/values are preserved.
+	local largest = 0
+	local function includeId(id: any)
+		local serial = if type(id) == "string" then tonumber(id:match("^w(%d+)$")) else nil
+		if serial and serial < Balance.maxSafeInteger then largest = math.max(largest, serial) end
+	end
+	for id, weapon in p.weapons do
+		includeId(id)
+		if type(weapon) == "table" then includeId(weapon.id) end
+	end
+	if p.pending then includeId(p.pending.id) end
+	p.nextWeaponId = math.max(p.nextWeaponId, largest + 1)
+	if p.settings ~= nil then
+		if type(p.settings) ~= "table" then p.settings = {} end
+		for _, key in { "autoSellBelow", "autoKeepFrom" } do
+			if p.settings[key] ~= nil then p.settings[key] = math.clamp(nonNegativeInt(p.settings[key], 0), 0, 7) end
+		end
 	end
 	if type(p.showcase) ~= "table" then
 		p.showcase = {}
@@ -412,6 +438,9 @@ function Economy.canForge(p: Profile, materialIndex: any, classIndex: any): (boo
 	if not ForgeMath.isValidClass(classIndex) then
 		return false, "InvalidClass"
 	end
+	if materialIndex > p.unlockedTier then
+		return false, "MaterialLocked"
+	end
 	if p.ingots[materialIndex] < Balance.forge.materialUnitsPerRoll then
 		return false, "NoMaterial"
 	end
@@ -431,13 +460,18 @@ function Economy.completeForge(p: Profile, materialIndex: number, classIndex: nu
 	if not ok then
 		return false, err
 	end
-	local id = "w" .. p.nextWeaponId
+	local serial = nonNegativeInt(p.nextWeaponId, 1)
+	local id = "w" .. serial
+	while p.weapons[id] ~= nil or (p.pending and p.pending.id == id) do
+		serial = if serial >= Balance.maxSafeInteger then 1 else serial + 1
+		id = "w" .. serial
+	end
 	local weapon = ForgeMath.rollWeapon(rng, materialIndex, classIndex, luck, { id = id, ts = now })
 	local keepIngot = rng:NextNumber() < Balance.upgradeEffect("Gloves", p.gear.Gloves)
 	if not keepIngot then
 		p.ingots[materialIndex] -= Balance.forge.materialUnitsPerRoll
 	end
-	p.nextWeaponId += 1
+	p.nextWeaponId = if serial >= Balance.maxSafeInteger then 1 else serial + 1
 	if p.pending then
 		p.weapons[p.pending.id] = p.pending
 	end
@@ -468,6 +502,39 @@ function Economy.resolvePending(p: Profile, action: any): (boolean, any)
 		return true, { action = "keep", weapon = weapon }
 	end
 	return false, "InvalidAction"
+end
+
+-- One minigame can produce a primary result and one extra independent roll. The primary
+-- remains pending for its reveal; extra results are kept (or filtered into sales). Each
+-- roll validates its own material and inventory capacity before charging anything.
+function Economy.completeForgeBatch(p: Profile, materialIndex: number, classIndex: number, luck: number, rng: ForgeMath.Rng, now: number, rolls: number, sellBelow: number?, extraSellBelow: number?): (boolean, any)
+	if rolls ~= math.floor(rolls) or rolls < 1 or rolls > 2 then
+		return false, "InvalidRequest"
+	end
+	local ok, primary = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now)
+	if not ok then
+		return false, primary
+	end
+	local threshold = if type(sellBelow) == "number" and sellBelow == sellBelow then sellBelow else 0
+	if primary.r < threshold then
+		Economy.resolvePending(p, "sell")
+	end
+	local pendingPrimary = p.pending
+	local extraThreshold = if type(extraSellBelow) == "number" and extraSellBelow == extraSellBelow then extraSellBelow else threshold
+	local extras = {}
+	for _ = 2, rolls do
+		local extraOk, extra = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now)
+		if not extraOk then
+			break -- lack of supply/room reduces throughput, never creates a free result
+		end
+		table.insert(extras, extra)
+		Economy.resolvePending(p, if extra.r < extraThreshold then "sell" else "keep")
+		if pendingPrimary then
+			p.weapons[pendingPrimary.id] = nil
+		end
+		p.pending = pendingPrimary
+	end
+	return true, { weapon = primary, extraWeapons = extras }
 end
 
 -- Sells kept weapons by id. Unknown, duplicate and showcased ids are skipped, never paid twice.

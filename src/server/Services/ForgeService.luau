@@ -13,8 +13,8 @@
 	Auto modes loop until stopAuto, the player leaves, ingots run out or inventory fills; each
 	new result auto-keeps the previous pending weapon, and `stopped` fires with the reason.
 
-	profile.settings.autoSellBelow (rarity index, 0 = off) sells any new result whose rarity is
-	below it as soon as it is rolled, in every mode.
+	profile.settings.autoSellBelow (rarity index, 0 = off) requires CollectionMagnet. Preferences
+	are retained when ownership lapses, but ignored. Free automatic modes still use autoKeepFrom.
 ]]
 
 local Players = game:GetService("Players")
@@ -29,7 +29,7 @@ local ProductionService = require(script.Parent.ProductionService)
 
 local ForgeService = {}
 
-ForgeService.completed = Instance.new("BindableEvent") -- (player, weapon, luck, auto, validStrikes)
+ForgeService.completed = Instance.new("BindableEvent") -- (player, weapon, luck, auto, validStrikes, extraWeapons)
 ForgeService.stopped = Instance.new("BindableEvent") -- (player, reason) when an auto loop ends
 -- (player, { sessionId, phase = "heat"|"strike"|"quench"|"done"|"cancelled"|"stopped", reason? })
 ForgeService.phase = Instance.new("BindableEvent")
@@ -55,6 +55,9 @@ type Session = {
 	strikes: ForgeMath.StrikeState?,
 	done: boolean,
 	auto: boolean,
+	profile: Economy.Profile,
+	evolutionRank: number,
+	rolls: number,
 }
 
 -- Timer jitter allowance so an auto loop firing right at readyAt is not rejected as Busy.
@@ -63,13 +66,22 @@ local READY_TOLERANCE_SEC = 0.05
 local sessions: { [Player]: Session } = {}
 local nextSessionId = 0
 
-local function ownsPremium(player: Player): boolean
+local function owns(player: Player, key: string): boolean
 	local monetization = ProductionService._service("MonetizationService")
 	if not monetization or type(monetization.owns) ~= "function" then
 		return false
 	end
-	local ok, owns = pcall(monetization.owns, player, "PremiumAutoForge")
-	return ok and owns == true
+	local ok, owned = pcall(monetization.owns, player, key)
+	return ok and owned == true
+end
+
+local function canUsePaidRandom(player: Player): boolean
+	local monetization = ProductionService._service("MonetizationService")
+	if not monetization or type(monetization.canOfferPaidRandom) ~= "function" then
+		return false
+	end
+	local ok, allowed = pcall(monetization.canOfferPaidRandom, player)
+	return ok and allowed == true
 end
 
 local function isValidMode(mode: any): boolean
@@ -90,8 +102,19 @@ local function begin(player: Player, classIndex: any, materialIndex: any, mode: 
 	if not data then
 		return false, "NotLoaded"
 	end
-	if mode == "premium" and not ownsPremium(player) then
+	if mode == "premium" and not owns(player, "PremiumAutoForge") then
 		return false, "NotOwned"
+	end
+	local paidAllowed = false
+	if mode == "premium" or owns(player, "MultiForge") then
+		paidAllowed = canUsePaidRandom(player)
+	end
+	if mode == "premium" and not paidAllowed then
+		return false, "PaidRandomRestricted"
+	end
+	-- Optional entitlement/policy hooks may yield. Never start against a released profile.
+	if DataService.get(player) ~= data then
+		return false, "NotLoaded"
 	end
 	local now = ForgeService.clock()
 	local current = sessions[player]
@@ -120,6 +143,9 @@ local function begin(player: Player, classIndex: any, materialIndex: any, mode: 
 		strikes = if mode == "manual" then ForgeMath.newStrikeState(windowStart, timing.windowSec) else nil,
 		done = false,
 		auto = mode ~= "manual",
+		profile = data,
+		evolutionRank = data.evolutionRank or 0,
+		rolls = if paidAllowed and owns(player, "MultiForge") then 2 else 1,
 	}
 	sessions[player] = session
 	local id = session.id
@@ -180,31 +206,58 @@ complete = function(player: Player, sessionId: string)
 		return
 	end
 	session.done = true
-	local now = ForgeService.clock()
-	session.readyAt = now + session.timing.revealSec
+	session.readyAt = math.huge -- a yielding policy check cannot open a second forge
 
 	local data = DataService.get(player)
 	if not data then
 		sessions[player] = nil
 		return
 	end
+	local function cancel(reason: string)
+		session.readyAt = ForgeService.clock()
+		firePhase(player, session.id, "cancelled", reason)
+		stopWith(player, session, reason)
+	end
+	if data ~= session.profile or (data.evolutionRank or 0) ~= session.evolutionRank then
+		cancel("ProgressReset")
+		return
+	end
+	local paidAllowed = false
+	if session.mode == "premium" or session.rolls > 1 then
+		paidAllowed = canUsePaidRandom(player)
+	end
+	if session.mode == "premium" then
+		if not owns(player, "PremiumAutoForge") then
+			cancel("NotOwned")
+			return
+		elseif not paidAllowed then
+			cancel("PaidRandomRestricted")
+			return
+		end
+	end
+	-- Re-check after optional hooks so resets/rejoins cannot spend a new profile's ingots.
+	if sessions[player] ~= session or DataService.get(player) ~= data or (data.evolutionRank or 0) ~= session.evolutionRank then
+		cancel("ProgressReset")
+		return
+	end
 	local luck = if session.strikes
 		then ForgeMath.strikeLuck(session.strikes)
 		else ForgeMath.autoLuck(session.mode) :: number
-	local ok, result = Economy.completeForge(data, session.materialIndex, session.classIndex, luck, ForgeService.rng, os.time())
+	local settings = data.settings
+	local sellBelow = if owns(player, "CollectionMagnet") and type(settings) == "table" then settings.autoSellBelow else nil
+	local keepFrom = if type(settings) == "table" and type(settings.autoKeepFrom) == "number" then settings.autoKeepFrom else 4
+	local extraSellBelow = if session.mode ~= "manual" then math.max(sellBelow or 0, keepFrom) else sellBelow
+	local rolls = if session.rolls > 1 and paidAllowed and owns(player, "MultiForge") then 2 else 1
+	local ok, batch = Economy.completeForgeBatch(data, session.materialIndex, session.classIndex, luck, ForgeService.rng, os.time(), rolls, sellBelow, extraSellBelow)
 	if not ok then
-		firePhase(player, session.id, "cancelled", result)
-		stopWith(player, session, result)
+		cancel(batch)
 		return
 	end
-	local settings = data.settings
-	local sellBelow = if type(settings) == "table" then settings.autoSellBelow else nil
-	if type(sellBelow) == "number" and result.r < sellBelow then
-		Economy.resolvePending(data, "sell")
-	end
+	local result = batch.weapon
+	session.readyAt = ForgeService.clock() + session.timing.revealSec
 	DataService.markDirty(player)
 	firePhase(player, session.id, "quench")
-	ForgeService.completed:Fire(player, result, luck, session.mode ~= "manual", if session.strikes then session.strikes.valid else 0)
+	ForgeService.completed:Fire(player, result, luck, session.mode ~= "manual", if session.strikes then session.strikes.valid else 0, batch.extraWeapons)
 	ForgeService.delay(session.timing.revealSec, function()
 		if sessions[player] == session then
 			firePhase(player, session.id, "done")

@@ -19,6 +19,8 @@ Protocol.Actions = {
 	Hatch = "Hatch", -- (eggId, count) -> { pets }
 	EquipPet = "EquipPet", -- (petId)
 	UnequipPet = "UnequipPet", -- (petId)
+	EquipBestPets = "EquipBestPets", -- () equip strongest owned companions
+	ReleasePet = "ReleasePet", -- (petId) permanently release a non-premium companion
 	EvolutionStatus = "EvolutionStatus", -- () -> status table
 	Evolve = "Evolve", -- (protected: boolean) -> newRank
 	Leaderboards = "Leaderboards", -- () -> { [metric] = {{ userId, name, value }} }

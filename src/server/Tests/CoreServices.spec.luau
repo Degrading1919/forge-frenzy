@@ -10,10 +10,18 @@ local Economy = require(game:GetService("ReplicatedStorage").Shared.Economy)
 
 local Players = game:GetService("Players")
 
-local function withForge(fn: (any, { now: number }) -> ())
+local function withForge(fn: (any, { now: number }) -> (), owned: { [string]: boolean }?)
 	local player = { UserId = -4242, Name = "SpecSmith", Parent = Players }
 	local clock = { now = 1000 }
-	local saved = { clock = ForgeService.clock, delay = ForgeService.delay, rng = ForgeService.rng }
+	local saved = { clock = ForgeService.clock, delay = ForgeService.delay, rng = ForgeService.rng, service = ProductionService._service }
+	if owned then
+		ProductionService._service = function(name)
+			if name == "MonetizationService" then
+				return { owns = function(_, key) return owned[key] == true end }
+			end
+			return saved.service(name)
+		end
+	end
 	ForgeService.clock = function()
 		return clock.now
 	end
@@ -22,6 +30,7 @@ local function withForge(fn: (any, { now: number }) -> ())
 	DataService._setForTest(player, Economy.newProfile())
 	local ok, err = pcall(fn, player, clock)
 	ForgeService.clock, ForgeService.delay, ForgeService.rng = saved.clock, saved.delay, saved.rng
+	ProductionService._service = saved.service
 	DataService._setForTest(player, nil)
 	if not ok then
 		error(err, 0)
@@ -146,7 +155,7 @@ tests["auto-sell setting sells low rarities on completion"] = function()
 		assert(ForgeService.start(player, 1, 1, "free"))
 		ForgeService._completeNow(player)
 		assert(data.pending == nil and data.coins > 0 and data.weaponsSold == 1, "not auto-sold")
-	end)
+	end, { CollectionMagnet = true })
 end
 
 tests["glue helpers: timings, costs, sellKept, showcase slots"] = function()

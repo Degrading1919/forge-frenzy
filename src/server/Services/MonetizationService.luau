@@ -27,9 +27,6 @@ local MonetizationService = {}
 local Logic = {}
 MonetizationService.Logic = Logic
 
-local RECEIPT_KEEP = 200 -- most recent receipts kept for idempotency
-local RECEIPT_MIN_AGE = 30 * 24 * 3600 -- never prune a receipt younger than this
-
 local deps: { [string]: any } = {
 	getProfile = function(_player: any): any
 		return nil
@@ -46,6 +43,7 @@ local deps: { [string]: any } = {
 	companionLogic = nil, -- CompanionService.Logic
 	evolutionLogic = nil, -- EvolutionService.Logic
 	marketplace = nil, -- MarketplaceService
+	requestPolicy = nil,
 }
 
 -- Session-only state, keyed weakly by player; never written to the profile.
@@ -92,24 +90,6 @@ function Logic.applyGrants(profile: any, product: Products.Product, now: number,
 	end
 end
 
-local function pruneReceipts(receipts: { [string]: number }, now: number)
-	local list: { { id: string, at: number } } = {}
-	for id, at in receipts do
-		table.insert(list, { id = id, at = at })
-	end
-	if #list <= RECEIPT_KEEP then
-		return
-	end
-	table.sort(list, function(a, b)
-		return a.at < b.at
-	end)
-	for i = 1, #list - RECEIPT_KEEP do
-		if now - list[i].at >= RECEIPT_MIN_AGE then
-			receipts[list[i].id] = nil
-		end
-	end
-end
-
 --[[
 	Apply a developer product receipt exactly once.
 	Returns "granted" (newly applied), "duplicate" (already applied) or "unknown".
@@ -125,7 +105,7 @@ function Logic.applyReceipt(profile: any, purchaseId: string, productId: number,
 	end
 	Logic.applyGrants(profile, product, now)
 	profile.receipts[purchaseId] = now
-	pruneReceipts(profile.receipts, now)
+	-- Keep the ledger: Roblox may retry an old receipt; age is not proof it was acknowledged.
 	return "granted"
 end
 
@@ -138,6 +118,19 @@ function Logic.recordPass(profile: any, key: string, now: number)
 	end
 	profile.entitlements[key] = true
 	Logic.applyGrants(profile, product, now)
+end
+
+-- A successful platform lookup is authoritative even when it says false. Revoking a pass
+-- disables its ongoing effects only; previously granted companions and saved progress stay.
+function Logic.reconcilePass(profile: any, key: string, owned: boolean, now: number?)
+	Logic.ensure(profile)
+	local product = Products.ByKey[key]
+	if product == nil or product.kind ~= "pass" then return end
+	if owned == true then
+		Logic.recordPass(profile, key, now or deps.now())
+	else
+		profile.entitlements[key] = nil
+	end
 end
 
 -- Summed pass effects for a set of owned keys, capped per family by Products.EffectCap.
@@ -220,6 +213,10 @@ function MonetizationService.bonuses(player: any)
 end
 
 function MonetizationService.canOfferPaidRandom(player: any): boolean
+	-- Test passes are session overlays on an isolated Studio profile, never real purchases.
+	if deps.isStudio() and next(devPasses[player] or {}) ~= nil then
+		return true
+	end
 	return not deps.paidRandomRestricted(player)
 end
 
@@ -286,7 +283,9 @@ end
 
 -- ProcessReceipt body; returns "PurchaseGranted" or "NotProcessedYet" (mapped to the enum).
 function MonetizationService.processReceipt(receiptInfo: any, player: any): string
-	if player == nil then
+	if player == nil or type(receiptInfo) ~= "table"
+		or receiptInfo.PlayerId ~= player.UserId or type(receiptInfo.PurchaseId) ~= "string"
+		or receiptInfo.PurchaseId == "" or type(receiptInfo.ProductId) ~= "number" then
 		return "NotProcessedYet"
 	end
 	local profile = dataOf(player)
@@ -299,13 +298,18 @@ function MonetizationService.processReceipt(receiptInfo: any, player: any): stri
 		return "NotProcessedYet"
 	end
 	deps.markDirty(player)
-	if result == "granted" and deps.saveNow then
+	if deps.saveNow then
 		-- Acknowledge only once the receipt id is durably saved; a retry is a no-op thanks to
 		-- the ledger, so returning NotProcessedYet here can never double-grant.
-		local ok, saved = pcall(deps.saveNow, player)
-		if not ok or saved == false then
+		local purchaseId = receiptInfo.PurchaseId
+		local ok, saved = pcall(deps.saveNow, player, 15, function(savedData)
+			return type(savedData.receipts) == "table" and savedData.receipts[purchaseId] ~= nil
+		end)
+		if not ok or saved ~= true or dataOf(player) ~= profile then
 			return "NotProcessedYet"
 		end
+	else
+		return "NotProcessedYet"
 	end
 	return "PurchaseGranted"
 end
@@ -337,18 +341,17 @@ function MonetizationService.init()
 	-- Optional explicit save hook, if the DataService exposes one.
 	local save = DataService.saveNow or DataService.save
 	if type(save) == "function" then
-		deps.saveNow = function(player)
-			return save(player)
+		deps.saveNow = function(player, timeoutSec, predicate)
+			return save(player, timeoutSec, predicate)
 		end
 	end
 	deps.isStudio = function()
 		return RunService:IsStudio()
 	end
 	deps.paidRandomRestricted = function(player)
-		local cached = policyCache[player]
-		if cached ~= nil then
-			return cached
-		end
+		return policyCache[player] ~= false -- synchronous and fail closed during lookup
+	end
+	deps.requestPolicy = function(player)
 		local ok, info = pcall(PolicyService.GetPolicyInfoForPlayerAsync, PolicyService, player)
 		if not ok or type(info) ~= "table" then
 			return true
@@ -374,6 +377,7 @@ function MonetizationService.start()
 
 	-- Verify passes with Roblox on join; ids of 0 are skipped.
 	local function verifyPasses(player: Player)
+		if deps.requestPolicy then deps.requestPolicy(player) end
 		local profile = DataService.waitFor(player)
 		local data = if profile and type(profile.Data) == "table" then profile.Data else profile
 		if data == nil then
@@ -384,8 +388,9 @@ function MonetizationService.start()
 			if product.kind == "pass" then
 				if product.id ~= 0 then
 					local ok, owns = pcall(market.UserOwnsGamePassAsync, market, player.UserId, product.id)
-					if ok and owns then
-						Logic.recordPass(data, product.key, deps.now())
+					if dataOf(player) ~= data then return end
+					if ok then
+						Logic.reconcilePass(data, product.key, owns == true, deps.now())
 					end
 				elseif data.entitlements[product.key] then
 					-- Re-run idempotent grants (e.g. a premium companion that went missing).
@@ -408,8 +413,9 @@ function MonetizationService.start()
 			return
 		end
 		local data = dataOf(player)
-		if data then
-			Logic.recordPass(data, product.key, deps.now())
+		local ok, owns = pcall(market.UserOwnsGamePassAsync, market, player.UserId, passId)
+		if data and dataOf(player) == data and ok then
+			Logic.reconcilePass(data, product.key, owns == true, deps.now())
 			DataService.markDirty(player)
 		end
 	end)

@@ -53,6 +53,22 @@ end
 
 local tests = {}
 
+tests["legacy companion serials preserve owned pets and runtime counters cannot collide"] = function()
+	local kind = Eggs.List[1].kinds[1].kind
+	local original = { id = "p9", k = kind, ts = 1 }
+	local p = profile({ pets = { p9 = original }, equipped = { "p9" } })
+	Logic.ensure(p)
+	assert(p.petSerial == 9 and p.pets.p9 == original and p.equipped[1] == "p9")
+	local ok, pet = Logic.grantKind(p, kind, { now = 1000 })
+	assert(ok and pet.id == "p10" and p.pets.p9 == original)
+	p.petSerial = 8 -- missing/stale counters are recovered before every hatch/grant
+	local ok2, pet2 = Logic.grantKind(p, kind, { now = 1001 })
+	assert(ok2 and pet2.id == "p11" and p.pets.p9 == original and p.pets.p10 == pet)
+	p.petSerial = math.huge
+	Logic.ensure(p)
+	assert(p.petSerial == 11, "nonfinite counter must recover from existing IDs")
+end
+
 tests["every egg's odds sum to 100 and reference earnable kinds"] = function()
 	assert(#Eggs.List >= 1, "no eggs")
 	for _, egg in Eggs.List do
@@ -275,6 +291,7 @@ tests["player multi-hatch checks the MultiHatch pass"] = function()
 	local owns = false
 	local t = 0
 	Service._inject({
+		paidRandomAllowed = function() return true end,
 		getProfile = function()
 			return data
 		end,
@@ -291,6 +308,17 @@ tests["player multi-hatch checks the MultiHatch pass"] = function()
 	owns = true
 	local ok, pets = Service.hatch({}, "hearth", 5)
 	assert(ok and #pets == 5)
+end
+
+tests["restricted multi-hatch cannot spend coins but free single hatch works"] = function()
+	local Service = fresh()
+	local data = profile({ coins = 1e9, unlockedTier = 3 })
+	Service._inject({ getProfile = function() return data end, ownsPass = function() return true end,
+		paidRandomAllowed = function() return false end, rng = Random.new(9) })
+	local before = data.coins
+	local ok, why = Service.hatch({}, "hearth", 5)
+	assert(not ok and why == "PaidRandomRestricted" and data.coins == before)
+	assert(Service.hatch({}, "hearth", 1))
 end
 
 return tests

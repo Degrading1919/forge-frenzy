@@ -47,6 +47,7 @@ local list: { Product } = {
 		kind = "pass",
 		id = 0,
 		name = "Multi-Forge",
+		paidRandom = true,
 		description = "One extra forge slot. Each extra weapon still costs its own ingot and rolls independently.",
 		effects = { forgeSlots = 1 },
 	},
@@ -90,7 +91,7 @@ local list: { Product } = {
 		kind = "pass",
 		id = 0,
 		name = "Collection Magnet",
-		description = "Auto-collects finished output and unlocks auto-sell filters. Manual pickup and selling stay free.",
+		description = "Auto-sells manual forge results below your chosen rarity. Materials and free auto-forge output collect automatically for everyone.",
 	},
 	{
 		key = "VIPWorkshop",

@@ -134,6 +134,10 @@ function Remotes.snapshot(player: Player): any?
 	local timings = safe(Economy.forgeTiming, p, "manual", Production and safe(Production.bonuses, player)) or {}
 	local Materials = config("Materials")
 	local nextMat = Materials and Materials[(p.unlockedTier or 1) + 1]
+	local evolutionStatus = Evo and safe(function()
+		local ok, status = Evo.status(player)
+		return ok and status or nil
+	end) or nil
 	local s = Remotes.session(player)
 	local entitlements = {}
 	for k, v in p.entitlements or {} do
@@ -151,6 +155,7 @@ function Remotes.snapshot(player: Player): any?
 		highestWeaponValue = p.highestWeaponValue or 0,
 		selectedMaterial = p.selectedMaterial or 1,
 		unlockedTier = p.unlockedTier or 1,
+		highestTierEver = p.highestTierEver or p.unlockedTier or 1,
 		ore = toArray(p.ore, MATERIAL_COUNT),
 		ingots = toArray(p.ingots, MATERIAL_COUNT),
 		levels = p.levels or {},
@@ -167,8 +172,8 @@ function Remotes.snapshot(player: Player): any?
 		equipped = p.equipped or {},
 		petSlots = p.petSlots or 2,
 		evolutionRank = p.evolutionRank or 0,
-		forgedSinceEvolve = p.forgedSinceEvolve or 0,
-		highestTierSinceEvolve = p.highestTierSinceEvolve or 1,
+		forgedSinceEvolve = evolutionStatus and evolutionStatus.progress.forged or 0,
+		highestTierSinceEvolve = evolutionStatus and evolutionStatus.progress.tier or 1,
 		entitlements = entitlements,
 		settings = p.settings or { autoSellBelow = 0, music = true, sfx = true, vfx = true },
 		tutorial = p.tutorial or 0,
@@ -184,11 +189,9 @@ function Remotes.snapshot(player: Player): any?
 		plotIndex = s.plotIndex,
 		isStudio = RunService:IsStudio(),
 		productsLive = Products ~= nil and Products.LIVE == true,
-		paidRandomAllowed = Monet == nil or (safe(Monet.canOfferPaidRandom, player) ~= false),
-		evolutionEligible = Evo and (safe(function()
-			local ok, st = Evo.status(player)
-			return ok and type(st) == "table" and st.eligible == true
-		end) or false) or false,
+		paidRandomAllowed = Monet ~= nil and safe(Monet.canOfferPaidRandom, player) == true,
+		saveStatus = Data.getStatus and safe(Data.getStatus, player) or { persistent = false, mode = "Unknown" },
+		evolutionEligible = evolutionStatus ~= nil and evolutionStatus.eligible == true,
 		evolveCharges = p.evolveCharges or 0,
 	}
 end
@@ -201,6 +204,7 @@ local MIN_INTERVAL = 0.08 -- per-action spam guard (seconds)
 
 local FRIENDLY = {
 	NotLoaded = "Your save is still loading", NoMaterial = "Not enough ingots of that material",
+	PaidRandomRestricted = "Premium random features are unavailable for this account",
 	InventoryFull = "Inventory full: sell or display some weapons", Busy = "The forge is busy",
 	NotOwned = "You don't own that yet", NotEnoughCoins = "Not enough coins", MaxTier = "Already at the highest tier",
 	MaxLevel = "Already maxed", Locked = "That material isn't unlocked yet", NothingPending = "Nothing to collect",
@@ -309,6 +313,13 @@ handlers[A.UnequipPet] = function(player, petId)
 	end
 	return call("CompanionService", "unequip", player, petId)
 end
+handlers[A.EquipBestPets] = function(player)
+	return call("CompanionService", "equipBest", player)
+end
+handlers[A.ReleasePet] = function(player, petId)
+	if type(petId) ~= "string" or #petId > 64 then return false, "Invalid pet" end
+	return call("CompanionService", "release", player, petId)
+end
 handlers[A.EvolutionStatus] = function(player)
 	return call("EvolutionService", "status", player)
 end
@@ -321,19 +332,22 @@ handlers[A.Evolve] = function(player, protected)
 end
 local boardCache: { at: number, data: any } = { at = 0, data = {} }
 handlers[A.Leaderboards] = function(_player)
-	if os.clock() - boardCache.at < 20 then
+	if boardCache.at > 0 and os.clock() - boardCache.at < 20 then
 		return true, boardCache.data
 	end
 	local LB = svc("LeaderboardService")
 	local data = {}
+	data.scopes = {}
 	if LB and LB.getTop then
 		-- Client boards are keyed by profile field; LeaderboardService keys its stores by short names.
 		local keys = { lifetimeCoins = "wealth", weaponsForged = "forged", evolutionRank = "evolutions", highestWeaponValue = "bestWeapon" }
 		for field, key in keys do
 			local ok, top = pcall(LB.getTop, key, 10)
+			data.scopes[field] = RunService:IsStudio() and "Studio global" or "Global"
 			if not ok or type(top) ~= "table" or #top == 0 then
 				-- Global boards are unavailable in Studio or still warming up: show this server's ranking.
 				ok, top = pcall(LB.getServerTop, key, 10)
+				data.scopes[field] = "This server"
 			end
 			data[field] = ok and top or {}
 		end
@@ -363,6 +377,12 @@ handlers[A.SetSetting] = function(player, key, value)
 	end
 	if (key == "autoSellBelow" or key == "autoKeepFrom") and not isInt(value, 0, 7) then
 		return false, "Invalid setting"
+	end
+	if key == "autoSellBelow" and value > 1 then
+		local Monet = svc("MonetizationService")
+		if not Monet or safe(Monet.owns, player, "CollectionMagnet") ~= true then
+			return false, "Collection Magnet unlocks manual auto-sell filters"
+		end
 	end
 	local Data = svc("DataService")
 	local p = Data and Data.get(player)
@@ -400,8 +420,15 @@ local RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythi
 local CLASS_NAMES = { "Sword", "Greatsword", "Axe", "Dagger", "Hammer" }
 local lastAnnounce = 0
 
-local function onForgeCompleted(player: Player, weapon: any, luck: number, auto: boolean?, strikes: number?)
-	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes or 0, auto = auto == true })
+local function onForgeCompleted(player: Player, weapon: any, luck: number, auto: boolean?, strikes: number?, extraWeapons: any?)
+	local Data = svc("DataService")
+	local p = Data and Data.get(player)
+	local autoSold = p ~= nil and (p.pending == nil or p.pending.id ~= weapon.id)
+	local extras = {}
+	for _, extra in extraWeapons or {} do
+		table.insert(extras, { weapon = extra, autoSold = p ~= nil and p.weapons[extra.id] == nil })
+	end
+	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes or 0, auto = auto == true, autoSold = autoSold, extraWeapons = extras })
 	if auto then
 		-- Auto forging resolves on the server so the loop never stalls on a pending result:
 		-- keep rarities at or above the player's threshold (default Epic), sell the rest.
@@ -492,6 +519,21 @@ function Remotes.init()
 				p.ingots[args[1]] = args[2]
 			elseif cmd == "snapshot" then
 				return Remotes.snapshot(player)
+			elseif cmd == "action" then
+				local handler = handlers[args[1]]
+				if not handler then return false, "Unknown action" end
+				local ok, result = handler(player, table.unpack(args, 2))
+				Remotes.markDirty(player)
+				return ok, result
+			elseif cmd == "save" then
+				return Data.saveNow(player, 20), Data.getStatus(player)
+			elseif cmd == "status" then
+				return Data.getStatus(player)
+			elseif cmd == "revoke" then
+				local Monet = svc("MonetizationService")
+				local ok, result = Monet.revokeDev(player, args[1])
+				Remotes.markDirty(player)
+				return ok, result
 			end
 			Data.markDirty(player)
 			return true

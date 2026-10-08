@@ -23,6 +23,25 @@ end
 
 local tests = {}
 
+tests["successful pass reconciliation revokes effects while preserving permanent grants"] = function()
+	local Service = fresh()
+	local player = { UserId = 1 }
+	local data = { coins = 777, lifetimeCoins = 999, evolveCharges = 2, weapons = { treasured = { v = 100 } } }
+	Service._inject({ getProfile = function() return data end })
+	Service.Logic.reconcilePass(data, "TitanExcavator", true, 1000)
+	Service.Logic.reconcilePass(data, "GoldenForgeDragon", true, 1000)
+	assert(Service.owns(player, "TitanExcavator") and Service.bonuses(player).extract == 1)
+	local petId
+	for id in data.pets do petId = id end
+	assert(petId ~= nil)
+	Service.Logic.reconcilePass(data, "TitanExcavator", false, 1001)
+	Service.Logic.reconcilePass(data, "GoldenForgeDragon", false, 1001)
+	assert(not Service.owns(player, "TitanExcavator") and Service.bonuses(player).extract == 0)
+	assert(data.pets[petId] ~= nil and data.coins == 777 and data.lifetimeCoins == 999 and data.evolveCharges == 2 and data.weapons.treasured.v == 100)
+	Service.Logic.reconcilePass(data, "GoldenForgeDragon", true, 1002)
+	assert(CompanionLogic.petCount(data) == 1, "ownership restoration must not duplicate companion")
+end
+
 tests["store ships with LIVE off"] = function()
 	assert(Products.LIVE == false, "Products.LIVE must stay false until the owner approves")
 end
@@ -121,7 +140,7 @@ tests["protected evolution product adds one charge per purchase"] = function()
 	assert(p.evolveCharges == 2)
 end
 
-tests["receipt ledger is pruned only for old entries"] = function()
+tests["old receipts remain idempotent after many purchases"] = function()
 	local Logic = fresh().Logic
 	Products.ProductById[9004] = withId("ProtectedEvolution", 9004)
 	local p = {}
@@ -140,8 +159,12 @@ tests["receipt ledger is pruned only for old entries"] = function()
 		count += 1
 	end
 	Products.ProductById[9004] = nil
-	assert(count == 200, "expected pruning to 200, got " .. count)
-	assert(p.receipts.late ~= nil and p.receipts.r260 ~= nil and p.receipts.r1 == nil)
+	assert(count == 261, "old unacknowledged receipts must remain in the ledger")
+	assert(p.receipts.late ~= nil and p.receipts.r260 ~= nil and p.receipts.r1 ~= nil)
+	Products.ProductById[9004] = withId("ProtectedEvolution", 9004)
+	assert(Logic.applyReceipt(p, "r1", 9004, later + 1) == "duplicate")
+	Products.ProductById[9004] = nil
+	assert(p.evolveCharges == 261)
 end
 
 tests["processReceipt waits for a successful save before acknowledging"] = function()
@@ -159,6 +182,7 @@ tests["processReceipt waits for a successful save before acknowledging"] = funct
 	})
 	local info = { PlayerId = 1, PurchaseId = "p-1", ProductId = 9005 }
 	assert(Service.processReceipt(info, { UserId = 1 }) == "NotProcessedYet")
+	assert(Service.processReceipt(info, { UserId = 1 }) == "NotProcessedYet", "in-memory duplicate must still wait for a save")
 	saveWorks = true
 	assert(Service.processReceipt(info, { UserId = 1 }) == "PurchaseGranted")
 	Products.ProductById[9005] = nil
@@ -222,6 +246,30 @@ tests["paid-random gate fails closed by default"] = function()
 		end,
 	})
 	assert(Service.canOfferPaidRandom({ UserId = 1 }))
+end
+
+tests["Studio dev random passes bypass policy only in Studio"] = function()
+	local Service = fresh()
+	local player, data = { UserId = 1 }, {}
+	local studio = true
+	Service._inject({ getProfile = function() return data end, isStudio = function() return studio end })
+	assert(not Service.canOfferPaidRandom(player))
+	assert(Service.grantDev(player, "MultiForge"))
+	assert(Service.canOfferPaidRandom(player))
+	studio = false
+	assert(not Service.canOfferPaidRandom(player))
+end
+
+tests["receipt requires matching player, valid id and durable save hook"] = function()
+	local Service = fresh()
+	local player, data = { UserId = 1 }, { coins = 0 }
+	Service._inject({ getProfile = function() return data end })
+	assert(Service.processReceipt({ PlayerId = 2, ProductId = 9006, PurchaseId = "x" }, player) == "NotProcessedYet")
+	assert(Service.processReceipt({ PlayerId = 1, ProductId = 9006 }, player) == "NotProcessedYet")
+	Products.ProductById[9006] = withId("StarterPack", 9006)
+	assert(Service.processReceipt({ PlayerId = 1, ProductId = 9006, PurchaseId = "valid" }, player) == "NotProcessedYet")
+	Products.ProductById[9006] = nil
+	assert(data.coins == 2500)
 end
 
 tests["owns reads verified entitlements from the profile"] = function()

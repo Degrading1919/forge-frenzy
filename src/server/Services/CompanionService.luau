@@ -36,6 +36,9 @@ local deps = {
 	ownsPass = function(_player: any, _key: string): boolean
 		return false
 	end,
+	paidRandomAllowed = function(_player: any): boolean
+		return false
+	end,
 	clock = os.clock,
 	now = os.time,
 	isStudio = function(): boolean
@@ -65,8 +68,16 @@ function Logic.ensure(profile: any)
 	if type(profile.equipped) ~= "table" then
 		profile.equipped = {}
 	end
-	if type(profile.petSerial) ~= "number" then
+	if type(profile.petSerial) ~= "number" or profile.petSerial ~= profile.petSerial or profile.petSerial < 0 or profile.petSerial == math.huge then
 		profile.petSerial = 0
+	end
+	profile.petSerial = math.min(2 ^ 53 - 1, math.floor(profile.petSerial))
+	-- Recover the counter in migrated saves before any hatch/grant can reuse an owned ID.
+	for id, pet in profile.pets do
+		for _, candidate in { id, if type(pet) == "table" then pet.id else nil } do
+			local serial = if type(candidate) == "string" then tonumber(candidate:match("^p(%d+)$")) else nil
+			if serial and serial < 2 ^ 53 then profile.petSerial = math.max(profile.petSerial, serial) end
+		end
 	end
 	local seen = {}
 	for i = #profile.equipped, 1, -1 do
@@ -100,7 +111,9 @@ function Logic.petCount(profile: any): number
 end
 
 local function newPet(profile: any, kindId: string, now: number, src: string?): Pet
-	profile.petSerial += 1
+	repeat
+		profile.petSerial = if profile.petSerial >= 2 ^ 53 - 1 then 1 else profile.petSerial + 1
+	until profile.pets["p" .. profile.petSerial] == nil
 	local pet: Pet = { id = "p" .. profile.petSerial, k = kindId, ts = now, src = src }
 	profile.pets[pet.id] = pet
 	return pet
@@ -325,6 +338,9 @@ local function withProfile(player: any, fn: (any) -> (boolean, any)): (boolean, 
 end
 
 function CompanionService.hatch(player: any, eggId: any, count: any): (boolean, any)
+	if count ~= nil and count ~= 1 and not deps.paidRandomAllowed(player) then
+		return false, "PaidRandomRestricted"
+	end
 	local t = deps.clock()
 	local last = lastHatchAt[player]
 	if last and t - last < Companions.HatchCooldownSec then
@@ -416,6 +432,10 @@ function CompanionService.init()
 	deps.ownsPass = function(player, key)
 		local found = script.Parent:FindFirstChild("MonetizationService")
 		return found ~= nil and (require(found) :: any).owns(player, key) == true
+	end
+	deps.paidRandomAllowed = function(player)
+		local found = script.Parent:FindFirstChild("MonetizationService")
+		return found ~= nil and (require(found) :: any).canOfferPaidRandom(player) == true
 	end
 end
 

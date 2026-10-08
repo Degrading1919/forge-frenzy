@@ -61,6 +61,38 @@ tests["reconcile repairs damaged profiles without touching foreign fields"] = fu
 	assert(p.gear.Hammer == 0, "gear filled")
 end
 
+tests["reconcile repairs partial progress, malformed tracks, and unsafe numeric fields"] = function()
+	local p = Economy.newProfile()
+	p.coins = math.huge
+	p.lifetimeCoins = Balance.maxSafeInteger * 2
+	p.weaponsForged = 0 / 0
+	p.ore[1] = math.huge
+	p.ingots[2] = -3
+	p.progress = { ore = 0.5 } :: any
+	p.levels = "broken" :: any
+	p.gear = 10 :: any
+	Economy.reconcile(p)
+	assert(p.coins == 0 and p.lifetimeCoins == Balance.maxSafeInteger and p.weaponsForged == 0)
+	assert(p.ore[1] == 0 and p.ingots[2] == 0)
+	assert(p.progress.ore == 0.5 and p.progress.smelt == 0 and p.levels.ExtractorOutput == 0 and p.gear.Hammer == 0)
+	Economy.settle(p, 12, Economy.rates(p)) -- the restored pipeline must be executable
+end
+
+tests["weapon serial migration and runtime collisions never overwrite owned or pending items"] = function()
+	local p = Economy.newProfile()
+	local retained = { id = "w8", m = 1, c = 1, q = 1, r = 6, d = "x", v = 200, ts = 0 }
+	local pending = { id = "w12", m = 1, c = 1, q = 1, r = 6, d = "x", v = 201, ts = 0 }
+	p.weapons.w8, p.pending, p.nextWeaponId = retained, pending, nil :: any
+	Economy.reconcile(p)
+	assert(p.nextWeaponId == 13 and p.weapons.w8 == retained and p.pending == pending)
+	local rng = Random.new(5)
+	local ok, weapon = Economy.completeForge(p, 1, 1, 1.5, rng, 0)
+	assert(ok and weapon.id == "w13" and p.weapons.w8 == retained and p.weapons.w12 == pending)
+	p.nextWeaponId = 8 -- runtime defense also catches a damaged counter after load
+	local ok2, weapon2 = Economy.completeForge(p, 1, 1, 1.5, rng, 0)
+	assert(ok2 and weapon2.id ~= "w8" and weapon2.id ~= "w12" and weapon2.id ~= "w13" and p.weapons.w8 == retained)
+end
+
 tests["base rates follow the v0 numbers"] = function()
 	local p = Economy.newProfile()
 	local r = Economy.rates(p)
@@ -148,7 +180,7 @@ tests["locked materials cannot be selected"] = function()
 	ok, err = Economy.selectMaterial(p, 1.5)
 	assert(not ok and err == "InvalidMaterial")
 	ok, err = Economy.canForge(p, 2, 1)
-	assert(not ok and err == "NoMaterial", "no ingots of a locked material")
+	assert(not ok and err == "MaterialLocked", "locked material rejected even if stored ingots exist")
 end
 
 tests["unlocking the next material costs its unlockCost"] = function()
