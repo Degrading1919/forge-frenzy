@@ -40,7 +40,7 @@ local function build()
 		Name = "ForgeGame",
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Color3.fromRGB(22, 14, 10),
-		BackgroundTransparency = 0.08,
+		BackgroundTransparency = 0.6,
 		ClipsDescendants = true,
 		Parent = layer,
 	})

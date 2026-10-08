@@ -106,7 +106,7 @@ local function build()
 			Parent = f,
 		})
 		Theme.label({
-			Text = Format.abbr(mat.priceMin) .. " - " .. Format.abbr(mat.priceMax) .. " 🪙",
+			Text = Format.abbr(mat.priceMin) .. " - " .. Format.abbr(mat.priceMax) .. " coins",
 			Size = UDim2.new(0.4, -20, 0, 18),
 			Position = UDim2.new(0, 22, 0, 31),
 			TextXAlignment = Enum.TextXAlignment.Left,

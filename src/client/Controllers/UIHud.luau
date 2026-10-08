@@ -103,7 +103,7 @@ local function build()
 	local compact = Theme.compact()
 	local card = Theme.make("Frame", {
 		Name = "InfoCard",
-		Position = UDim2.new(0, 8, 0, 8),
+		Position = UDim2.new(0, 8, 0, 60),
 		Size = UDim2.new(0, compact and 170 or 240, 0, compact and 86 or 100),
 		BackgroundColor3 = C.bg,
 		BackgroundTransparency = 0.1,
@@ -154,8 +154,8 @@ local function build()
 	-- Rail (left)
 	local rail = Theme.scroll({
 		Name = "Rail",
-		Position = UDim2.new(0, 8, 0, compact and 100 or 116),
-		Size = UDim2.new(0, 60, 1, compact and -110 or -126),
+		Position = UDim2.new(0, 8, 0, compact and 152 or 168),
+		Size = UDim2.new(0, 60, 1, compact and -162 or -178),
 		ScrollBarThickness = 0,
 		Parent = layer,
 	})

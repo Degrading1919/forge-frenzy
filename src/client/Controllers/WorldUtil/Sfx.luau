@@ -9,20 +9,23 @@ local State = require(script.Parent.Parent.Parent.State)
 
 local Sfx = {}
 
-Sfx.ids = {
-	hammer_hit = "",
-	heat = "",
-	quench = "",
-	reveal_common = "",
-	reveal_rare = "",
-	reveal_legendary = "",
-	coin = "",
-	upgrade = "",
-	hatch = "",
-	evolve = "",
-	click = "",
-	music_workshop = "",
-}
+-- Ids come from Shared.Config.Sounds (each entry is a list of variants; one is picked per play).
+local okSounds, Sounds = pcall(function()
+	return require(game:GetService("ReplicatedStorage").Shared.Config.Sounds)
+end)
+Sfx.ids = {}
+if okSounds and type(Sounds) == "table" then
+	for name, list in Sounds do
+		Sfx.ids[name] = list
+	end
+end
+local rng = Random.new()
+local function pick(entry)
+	if type(entry) == "table" then
+		return #entry > 0 and entry[rng:NextInteger(1, #entry)] or ""
+	end
+	return entry
+end
 
 Sfx.volumes = {
 	hammer_hit = 0.7, heat = 0.5, quench = 0.7, reveal_common = 0.6, reveal_rare = 0.8,
@@ -37,7 +40,7 @@ end
 
 -- target: Instance (BasePart/Attachment, 3D) | Vector3 (3D at position) | nil (2D)
 function Sfx.play(name, target)
-	local id = Sfx.ids[name]
+	local id = pick(Sfx.ids[name])
 	if not id or id == "" or not settingOn("sfx") then
 		return
 	end
@@ -55,6 +58,7 @@ function Sfx.play(name, target)
 	s.SoundId = id
 	s.Volume = Sfx.volumes[name] or 0.6
 	s.RollOffMaxDistance = 90
+	s.PlaybackSpeed = name == "hammer_hit" and rng:NextNumber(0.92, 1.08) or 1
 	s.Parent = parent
 	s.Ended:Once(function()
 		s:Destroy()
@@ -68,7 +72,7 @@ end
 
 local music = nil
 function Sfx.startMusic()
-	local id = Sfx.ids.music_workshop
+	local id = pick(Sfx.ids.music_workshop)
 	if not id or id == "" or music then
 		return
 	end

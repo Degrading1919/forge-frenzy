@@ -231,6 +231,8 @@ function Theme.bar(props: { [string]: any }): any
 	})
 	Theme.make("TextLabel", {
 		Name = "Label",
+		Text = "",
+		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
 		TextSize = Theme.ts(14),
 		Font = Theme.Font2,

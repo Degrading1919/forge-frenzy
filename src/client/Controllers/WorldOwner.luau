@@ -68,7 +68,12 @@ local function faceCamera(plot)
 	cam.CFrame = CFrame.lookAt(pos, target + Vector3.new(0, 6, 0))
 end
 
+local lastCoins = nil
 local function onProfile(profile)
+	if lastCoins and (profile.coins or 0) > lastCoins then
+		Sfx.play("coin")
+	end
+	lastCoins = profile.coins or 0
 	local sum = Common.sumLevels(profile)
 	if lastLevels and sum > lastLevels then
 		Sfx.play("upgrade")

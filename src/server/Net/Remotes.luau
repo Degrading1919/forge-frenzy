@@ -327,13 +327,15 @@ handlers[A.Leaderboards] = function(_player)
 	local LB = svc("LeaderboardService")
 	local data = {}
 	if LB and LB.getTop then
-		for _, metric in { "lifetimeCoins", "weaponsForged", "evolutionRank", "highestWeaponValue" } do
-			local ok, top = pcall(LB.getTop, metric, 10)
+		-- Client boards are keyed by profile field; LeaderboardService keys its stores by short names.
+		local keys = { lifetimeCoins = "wealth", weaponsForged = "forged", evolutionRank = "evolutions", highestWeaponValue = "bestWeapon" }
+		for field, key in keys do
+			local ok, top = pcall(LB.getTop, key, 10)
 			if not ok or type(top) ~= "table" or #top == 0 then
 				-- Global boards are unavailable in Studio or still warming up: show this server's ranking.
-				ok, top = pcall(LB.getServerTop, metric, 10)
+				ok, top = pcall(LB.getServerTop, key, 10)
 			end
-			data[metric] = ok and top or {}
+			data[field] = ok and top or {}
 		end
 	end
 	boardCache = { at = os.clock(), data = data }

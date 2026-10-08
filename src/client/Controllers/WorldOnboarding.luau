@@ -31,9 +31,10 @@ local function buildGui()
 	gui = Instance.new("ScreenGui")
 	gui.Name = "Onboarding"
 	gui.ResetOnSpawn = false
-	gui.DisplayOrder = 20
+	gui.DisplayOrder = 4
 	card = Instance.new("Frame")
-	card.Position = UDim2.fromOffset(12, 70)
+	card.AnchorPoint = Vector2.new(1, 0)
+	card.Position = UDim2.new(1, -12, 0, 70)
 	card.Size = UDim2.fromOffset(270, 92)
 	card.BackgroundColor3 = Color3.fromRGB(34, 26, 22)
 	card.BackgroundTransparency = 0.1

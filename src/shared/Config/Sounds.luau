@@ -12,6 +12,6 @@ return {
 	upgrade = { "rbxassetid://4612374036" }, -- community upload; verify it loads
 	hatch = { "rbxassetid://9113959343" },
 	evolve = { "rbxassetid://1836860398" },
-	click = { "rbxassetid://88442833509532" }, -- community upload; verify it loads
+	click = {}, -- no verified click sound yet
 	music_workshop = { "rbxassetid://9045291036", "rbxassetid://9045289489" },
 }
