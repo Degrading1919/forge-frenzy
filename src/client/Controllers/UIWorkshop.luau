@@ -53,12 +53,12 @@ local function build()
 	window, content = Panels.create("Workshop", "Workshop", { onOpen = refresh })
 	ratesLabel = Theme.label({
 		Text = "",
-		Size = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.new(1, 0, 0, 40),
 		TextColor3 = C.dim,
 		TextSize = Theme.ts(13),
 		Parent = content,
 	})
-	local list = Theme.scroll({ Size = UDim2.new(1, 0, 1, -34), Position = UDim2.new(0, 0, 0, 32), Parent = content })
+	local list = Theme.scroll({ Size = UDim2.new(1, 0, 1, -46), Position = UDim2.new(0, 0, 0, 44), Parent = content })
 	local grid = Instance.new("UIGridLayout")
 	grid.CellSize = Theme.compact() and UDim2.new(1, -10, 0, 74) or UDim2.new(0.5, -10, 0, 78)
 	grid.CellPadding = UDim2.new(0, 8, 0, 8)
@@ -72,16 +72,17 @@ local function build()
 			LayoutOrder = i,
 			Parent = list,
 		})
-		Theme.make("TextLabel", { Text = t[3], Size = UDim2.new(0, 50, 1, 0), Position = UDim2.new(0, 4, 0, 0), TextSize = 30, Parent = f })
-		Theme.label({ Text = t[2], Size = UDim2.new(1, -190, 0, 22), Position = UDim2.new(0, 56, 0, 6), TextXAlignment = Enum.TextXAlignment.Left, TextSize = Theme.ts(16), Font = Theme.Font, TextWrapped = false, Parent = f })
-		local level = Theme.label({ Text = "Level 0", Size = UDim2.new(1, -190, 0, 18), Position = UDim2.new(0, 56, 0, 28), TextXAlignment = Enum.TextXAlignment.Left, TextSize = Theme.ts(13), TextColor3 = C.coin, Parent = f })
-		Theme.label({ Text = t[4], Size = UDim2.new(1, -190, 0, 28), Position = UDim2.new(0, 56, 0, 46), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextSize = Theme.ts(11), TextColor3 = C.dim, Parent = f })
+		Theme.make("TextLabel", { Text = t[3], Size = UDim2.new(0, 42, 0, 46), Position = UDim2.new(0, 4, 0, 0), TextSize = 30, Parent = f })
+		Theme.label({ Text = t[2], Size = UDim2.new(1, -60, 0, 22), Position = UDim2.new(0, 52, 0, 6), TextXAlignment = Enum.TextXAlignment.Left, TextSize = Theme.ts(16), Font = Theme.Font, TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = f })
+		local level = Theme.label({ Text = "Level 0", Size = UDim2.new(1, -60, 0, 18), Position = UDim2.new(0, 52, 0, 28), TextXAlignment = Enum.TextXAlignment.Left, TextSize = Theme.ts(13), TextColor3 = C.coin, Parent = f })
+		Theme.label({ Text = t[4], Size = UDim2.new(1, -142, 0, 44), Position = UDim2.new(0, 8, 0, 52), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, TextSize = Theme.ts(11), TextColor3 = C.dim, Parent = f })
 		local btn = Theme.button({
+			Name = t[1],
 			Text = "",
 			Color = C.good,
 			Size = UDim2.new(0, 120, 0, 46),
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -8, 0.5, 0),
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -8, 1, -6),
 			TextSize = Theme.ts(16),
 			OnClick = function()
 				local ok, res = Net.call("BuyUpgrade", t[1])
@@ -91,6 +92,12 @@ local function build()
 		})
 		cards[t[1]] = { level = level, btn = btn }
 	end
+	local function resize()
+		grid.CellSize = UDim2.new(list.AbsoluteSize.X < 720 and 1 or 0.5, -10, 0, 106)
+	end
+	list:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 end
 
 function M.init()

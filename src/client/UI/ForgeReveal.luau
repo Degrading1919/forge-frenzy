@@ -2,6 +2,7 @@
 -- Dramatic weapon reveal card with SELL / KEEP / Forge Again.
 local TweenService = game:GetService("TweenService")
 local Net = require(script.Parent.Parent.Net)
+local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Theme)
 local Data = require(script.Parent.Data)
 local Format = require(script.Parent.Format)
@@ -62,7 +63,7 @@ local function build()
 		Parent = root,
 	})
 	local lim = Instance.new("UISizeConstraint")
-	lim.MaxSize = Vector2.new(440, 600)
+	lim.MaxSize = Vector2.new(700, 600)
 	lim.Parent = card
 	ui.card = card
 	ui.cardScale = Instance.new("UIScale")
@@ -132,13 +133,16 @@ local function build()
 		Parent = card,
 	})
 	local row = Theme.make("Frame", {
+		Name = "Actions",
 		Size = UDim2.new(1, -24, 0, 50),
 		Position = UDim2.new(0, 12, 1, -118),
 		BackgroundTransparency = 1,
 		Parent = card,
 	})
+	ui.row = row
 	Theme.list(row, 8, Enum.FillDirection.Horizontal)
 	ui.sell = Theme.button({
+		Name = "SellOrContinue",
 		Text = "SELL",
 		Color = C.good,
 		Size = UDim2.new(0.5, -4, 1, 0),
@@ -149,6 +153,7 @@ local function build()
 		Parent = row,
 	})
 	ui.keep = Theme.button({
+		Name = "Keep",
 		Text = "KEEP",
 		Color = Color3.fromRGB(70, 130, 220),
 		Size = UDim2.new(0.5, -4, 1, 0),
@@ -159,6 +164,7 @@ local function build()
 		Parent = row,
 	})
 	ui.again = Theme.button({
+		Name = "ForgeAgain",
 		Text = "Forge Again",
 		Color = C.orange,
 		Size = UDim2.new(1, -24, 0, 50),
@@ -168,10 +174,55 @@ local function build()
 		end,
 		Parent = card,
 	})
+	local function resize()
+		local available = root.AbsoluteSize
+		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
+		local wide = available.Y < 420 and available.X >= 500
+		local width = math.min(wide and 700 or 440, available.X - 24)
+		local height = math.min(600, available.Y - 24)
+		card.Size = UDim2.fromOffset(width, height)
+		ui.big.TextSize = math.min(72, math.floor(width / 7))
+		ui.rarity.TextSize = wide and 26 or 30
+		ui.name.TextSize = 17
+		ui.value.TextSize = wide and 26 or 30
+		ui.info.TextSize = 13
+		if wide then
+			ui.view.Position = UDim2.new(0, 12, 0, 48)
+			ui.view.Size = UDim2.new(0.42, -12, 1, -60)
+			ui.name.Position = UDim2.new(0.44, 0, 0, 42)
+			ui.name.Size = UDim2.new(0.56, -12, 0, 44)
+			ui.value.Position = UDim2.new(0.44, 0, 0, 88)
+			ui.value.Size = UDim2.new(0.56, -12, 0, 32)
+			ui.info.Position = UDim2.new(0.44, 0, 0, 122)
+			ui.info.Size = UDim2.new(0.56, -12, 0, math.max(36, height - 234))
+			row.Position = UDim2.new(0.44, 0, 1, -108)
+			row.Size = UDim2.new(0.56, -12, 0, 46)
+			ui.again.Position = UDim2.new(0.44, 0, 1, -56)
+			ui.again.Size = UDim2.new(0.56, -12, 0, 46)
+		else
+			local previewHeight = math.clamp(height - 340, 72, 210)
+			ui.name.Position = UDim2.fromOffset(12, 48)
+			ui.name.Size = UDim2.new(1, -24, 0, 44)
+			ui.view.Position = UDim2.fromOffset(20, 98)
+			ui.view.Size = UDim2.new(1, -40, 0, previewHeight)
+			ui.value.Position = UDim2.fromOffset(0, previewHeight + 104)
+			ui.value.Size = UDim2.new(1, 0, 0, 38)
+			ui.info.Position = UDim2.fromOffset(12, previewHeight + 146)
+			ui.info.Size = UDim2.new(1, -24, 0, 52)
+			row.Position = UDim2.new(0, 12, 1, -118)
+			row.Size = UDim2.new(1, -24, 0, 50)
+			ui.again.Position = UDim2.new(0, 12, 1, -60)
+			ui.again.Size = UDim2.new(1, -24, 0, 50)
+		end
+	end
+	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 	Panels.register("ForgeReveal", root, nil, { locked = true, fullscreen = true, noBackdrop = true })
 end
 
 local function burst(color: Color3, n: number)
+	if State.profile and State.profile.settings and State.profile.settings.vfx == false then return end
 	for i = 1, n do
 		local ang = math.random() * math.pi * 2
 		local dist = 0.25 + math.random() * 0.4
@@ -215,7 +266,7 @@ function ForgeReveal.show(payload: any, ctx: any)
 	if not w then return end
 	showId += 1
 	local id = showId
-	current = { weapon = w, luck = payload.luck, strikes = payload.strikes, isNew = ctx and ctx.isNew, again = ctx and ctx.again }
+	current = { weapon = w, luck = payload.luck, strikes = payload.strikes, autoSold = payload.autoSold == true, isNew = ctx and ctx.isNew, again = ctx and ctx.again }
 	busy = false
 	local color = Theme.rarityColor(w.r)
 	local rname = Theme.RarityNames[w.r] or "Common"
@@ -227,29 +278,30 @@ function ForgeReveal.show(payload: any, ctx: any)
 	ui.stroke.Color = color
 	ui.stroke.Thickness = 5
 	ui.new.Visible = current.isNew == true
-	ui.sell.Text = "SELL  🪙 " .. Format.abbr(w.v)
+	ui.sell.Text = current.autoSold and "CONTINUE" or "SELL  🪙 " .. Format.abbr(w.v)
+	ui.sell.Size = UDim2.new(current.autoSold and 1 or 0.5, current.autoSold and 0 or -4, 1, 0)
+	ui.keep.Visible = not current.autoSold
 	ui.keep.Text = "KEEP"
-	ui.again.Text = (w.r >= 3) and "Keep & Forge Again" or "Sell & Forge Again"
+	ui.again.Text = current.autoSold and "Forge Again" or ((w.r >= 3) and "Keep & Forge Again" or "Sell & Forge Again")
 	ui.again.Visible = current.again ~= nil
 	local luckText = payload.luck and string.format("Luck %.2fx", payload.luck) or "Luck -"
 	local strikeText = payload.strikes and string.format("  -  %d strikes", payload.strikes) or ""
 	ui.info.Text = luckText .. strikeText .. "  -  " .. (Data.mat(w.m).name) .. " band " .. Format.abbr(Data.mat(w.m).priceMin) .. "-" .. Format.abbr(Data.mat(w.m).priceMax)
+	if current.autoSold then ui.info.Text ..= "\nAuto-sold for " .. Format.abbr(w.v) .. " coins" end
 	ui.value.Text = "🪙 0"
 	valueNum.Value = 0
 	setButtons(false)
 	Viewport.weapon(ui.view, w, true, nil, ui.vf)
-	local fit = math.min(1, Theme.viewport().Y / 580)
-	local ySc = 0.92 / fit
-	ui.cardScale.Scale = fit * (big and 1.05 or 1)
+	ui.cardScale.Scale = 0.88
 	ui.card.Visible = false
-	ui.card.Size = UDim2.new(0, 0, ySc, 0)
 	ui.flash.BackgroundTransparency = 1
 	ui.big.TextTransparency = 1
 	Panels.open("ForgeReveal")
 
 	task.spawn(function()
 		local stage = 0
-		if w.r >= 4 then
+		local vfx = not (State.profile and State.profile.settings and State.profile.settings.vfx == false)
+		if w.r >= 4 and vfx then
 			-- flash + title slam
 			ui.flash.BackgroundColor3 = color
 			ui.flash.BackgroundTransparency = 0.2
@@ -270,14 +322,13 @@ function ForgeReveal.show(payload: any, ctx: any)
 		end
 		if id ~= showId then return end
 		ui.card.Visible = true
-		local fullX = (Theme.compact() and 0.92 or 0.5) / fit
-		Theme.tween(ui.card, 0.45, { Size = UDim2.new(fullX, 0, ySc, 0) }, Enum.EasingStyle.Back)
+		Theme.tween(ui.cardScale, 0.3, { Scale = 1 })
 		task.wait(0.4)
 		if id ~= showId then return end
 		if big then burst(color, 28) elseif w.r >= 3 then burst(color, 10) end
 		Theme.tween(valueNum, big and 1.8 or 0.8, { Value = w.v }, Enum.EasingStyle.Quart)
 		if glowTween then glowTween:Cancel() end
-		if w.r >= 3 then
+		if w.r >= 3 and vfx then
 			glowTween = TweenService:Create(ui.stroke, TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Thickness = 11 })
 			glowTween:Play()
 		end
@@ -291,7 +342,8 @@ function ForgeReveal.resolve(action: string, quiet: boolean): boolean
 	if busy or not current then return false end
 	busy = true
 	setButtons(false)
-	local ok, res = Net.call("ForgeResolve", action)
+	local ok, res = true, { coins = current.weapon.v }
+	if not current.autoSold then ok, res = Net.call("ForgeResolve", action) end
 	if not ok then
 		Toast.show(res, "bad")
 		busy = false
@@ -299,7 +351,9 @@ function ForgeReveal.resolve(action: string, quiet: boolean): boolean
 		return false
 	end
 	if not quiet then
-		if action == "sell" then
+		if current.autoSold then
+			-- The server already sold this primary weapon using the player's filter.
+		elseif action == "sell" then
 			local coins = type(res) == "table" and res.coins or current.weapon.v
 			Toast.show("Sold for " .. Format.abbr(coins) .. " coins", "good")
 		else
@@ -310,6 +364,7 @@ function ForgeReveal.resolve(action: string, quiet: boolean): boolean
 	showId += 1
 	Viewport.clear(ui.vf)
 	Panels.close(true)
+	current = nil
 	return true
 end
 

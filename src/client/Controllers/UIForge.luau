@@ -34,14 +34,15 @@ end
 
 local function modeUnlocked(p, mode: string): boolean
 	if mode ~= "premium" then return true end
-	return p and p.entitlements and p.entitlements.PremiumAutoForge == true
+	return p and p.paidRandomAllowed == true and p.entitlements and p.entitlements.PremiumAutoForge == true
 end
 
 local function refresh()
 	local p = profile()
 	if not p or not window or not window.Visible then return end
-	selMat = selMat or p.selectedMaterial or 1
 	local tier = p.unlockedTier or 1
+	selMat = math.clamp(selMat or p.selectedMaterial or 1, 1, tier)
+	if not modeUnlocked(p, selMode) then selMode = "manual" end
 	for i, row in matRows do
 		local show = i <= tier
 		row.frame.Visible = show
@@ -71,7 +72,9 @@ local function refresh()
 	local ing = (p.ingots and p.ingots[selMat]) or 0
 	local mat = Data.mat(selMat)
 	summary.Text = string.format("%s %s  -  %s ingots  -  %s", mat.name, Data.ClassNames[selClass], Format.abbr(ing), selMode == "manual" and "Manual" or (selMode == "free" and "Auto 1.5x" or "Premium 4x"))
-	Theme.setEnabled(startBtn, ing > 0 and not starting)
+	local multi = p.entitlements and p.entitlements.MultiForge and p.paidRandomAllowed == true
+	if multi then summary.Text ..= "\nMulti-Forge: up to 2 ingots; bonus weapon kept or auto-sold" end
+	Theme.setEnabled(startBtn, ing > 0 and not starting and p.pending == nil)
 end
 
 local function startForge(picks)
@@ -79,6 +82,10 @@ local function startForge(picks)
 	local p = profile()
 	if not p then return end
 	local cls, mat, mode = picks.cls, picks.mat, picks.mode
+	if mat > (p.unlockedTier or 1) then
+		mat = p.selectedMaterial or 1
+		selMat = mat
+	end
 	if ((p.ingots and p.ingots[mat]) or 0) < 1 then
 		Toast.show("No ingots of " .. Data.mat(mat).name .. " - let the smelter work!", "bad")
 		return
@@ -130,14 +137,16 @@ local function buildPanel()
 	local content
 	window, content = Panels.create("Forge", "Forge", { onOpen = function() refresh() end, maxSize = Vector2.new(940, 640) })
 
-	-- Left column: weapon + mode
+	local body = Theme.scroll({ Name = "RecipeScroll", Size = UDim2.fromScale(1, 1), Parent = content })
+	-- Left column: weapon + mode; portrait stacks complete readable columns.
 	local left = Theme.scroll({
+		Name = "WeaponModePicker",
 		Size = UDim2.new(0.44, -6, 1, 0),
-		Parent = content,
+		Parent = body,
 	})
 	Theme.list(left, 6)
 	Theme.label({ Text = "WEAPON", Size = UDim2.new(1, 0, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, LayoutOrder = 1, Parent = left })
-	local grid = Theme.make("Frame", { Size = UDim2.new(1, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2, Parent = left })
+	local grid = Theme.make("Frame", { Name = "ClassGrid", Size = UDim2.new(1, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2, Parent = left })
 	local gl = Instance.new("UIGridLayout")
 	gl.CellSize = UDim2.new(0.3, 0, 0, 62)
 	gl.CellPadding = UDim2.new(0.04, 0, 0, 6)
@@ -145,6 +154,7 @@ local function buildPanel()
 	gl.Parent = grid
 	for i, name in Data.ClassNames do
 		local f = Theme.make("TextButton", {
+			Name = "Class_" .. tostring(i),
 			Text = Data.ClassIcons[i] .. "\n" .. name,
 			TextSize = Theme.ts(14),
 			BackgroundTransparency = 0,
@@ -164,6 +174,7 @@ local function buildPanel()
 	Theme.label({ Text = "MODE", Size = UDim2.new(1, 0, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, LayoutOrder = 3, Parent = left })
 	for i, m in MODES do
 		local b = Theme.button({
+			Name = "Mode_" .. m[1],
 			Text = m[2] .. "\n" .. m[3],
 			Color = C.panel2,
 			Size = UDim2.new(1, -8, 0, 48),
@@ -183,6 +194,7 @@ local function buildPanel()
 		table.insert(modeButtons, { mode = m[1], btn = b, title = m[2], sub = m[3] })
 	end
 	Theme.button({
+		Name = "ViewOdds",
 		Text = "View odds",
 		Color = Color3.fromRGB(70, 110, 160),
 		Size = UDim2.new(1, -8, 0, 44),
@@ -195,13 +207,14 @@ local function buildPanel()
 	})
 
 	-- Right column: materials + start
-	local right = Theme.make("Frame", { Size = UDim2.new(0.56, -6, 1, 0), Position = UDim2.new(0.44, 6, 0, 0), BackgroundTransparency = 1, Parent = content })
+	local right = Theme.make("Frame", { Name = "MaterialPicker", Size = UDim2.new(0.56, -6, 1, 0), Position = UDim2.new(0.44, 6, 0, 0), BackgroundTransparency = 1, Parent = body })
 	Theme.label({ Text = "MATERIAL", Size = UDim2.new(1, 0, 0, 20), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, Parent = right })
-	local list = Theme.scroll({ Size = UDim2.new(1, 0, 1, -96), Position = UDim2.new(0, 0, 0, 22), Parent = right })
+	local list = Theme.scroll({ Name = "MaterialList", Size = UDim2.new(1, 0, 1, -120), Position = UDim2.new(0, 0, 0, 22), Parent = right })
 	Theme.list(list, 5)
 	for i = 1, 32 do
 		local mat = Data.mat(i)
 		local f = Theme.make("TextButton", {
+			Name = "Material_" .. tostring(i),
 			Text = "",
 			Size = UDim2.new(1, -8, 0, 52),
 			BackgroundTransparency = 0,
@@ -227,8 +240,9 @@ local function buildPanel()
 		end)
 		matRows[i] = { frame = f, count = count, stroke = f:FindFirstChildOfClass("UIStroke") }
 	end
-	summary = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(1, 0, 1, -72), AnchorPoint = Vector2.new(1, 0), TextSize = Theme.ts(13), TextColor3 = C.dim, Parent = right })
+	summary = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 44), Position = UDim2.new(1, 0, 1, -98), AnchorPoint = Vector2.new(1, 0), TextSize = 13, TextColor3 = C.dim, Parent = right })
 	startBtn = Theme.button({
+		Name = "StartForging",
 		Text = "START FORGING",
 		Color = C.orange,
 		Size = UDim2.new(1, 0, 0, 52),
@@ -239,6 +253,19 @@ local function buildPanel()
 		end,
 		Parent = right,
 	})
+	local function resize()
+		local stacked = content.AbsoluteSize.X < 520
+		left.Position = UDim2.new()
+		left.Size = stacked and UDim2.new(1, -8, 0, 400) or UDim2.new(0.44, -6, 1, 0)
+		right.Position = stacked and UDim2.new(0, 0, 0, 412) or UDim2.new(0.44, 6, 0, 0)
+		right.Size = stacked and UDim2.new(1, -8, 0, 340) or UDim2.new(0.56, -6, 1, 0)
+		body.AutomaticCanvasSize = stacked and Enum.AutomaticSize.Y or Enum.AutomaticSize.None
+		body.CanvasSize = stacked and UDim2.fromOffset(0, 760) or UDim2.new()
+		gl.CellSize = UDim2.new(0.3, 0, 0, 62)
+	end
+	content:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 end
 
 function M.init()
@@ -248,6 +275,8 @@ function M.init()
 	ForgeGame.onReveal = showReveal
 
 	State.observe(function(p)
+		selMat = math.clamp(selMat or p.selectedMaterial or 1, 1, p.unlockedTier or 1)
+		if not modeUnlocked(p, selMode) then selMode = "manual" end
 		-- track journal as it was before any unresolved pending weapon
 		if not p.pending and p.journal then shadowJournal = table.clone(p.journal) end
 		if firstProfile then
@@ -268,6 +297,15 @@ function M.init()
 		if type(payload) ~= "table" or not payload.weapon then return end
 		ForgeSignals.Result:Fire(payload.weapon, payload.luck)
 		local w = payload.weapon
+		if type(payload.extraWeapons) == "table" and #payload.extraWeapons > 0 then
+			local names = {}
+			for _, extra in payload.extraWeapons do
+				local bonus = extra.weapon or extra
+				local sold = extra.autoSold == true
+				table.insert(names, Data.weaponName(bonus) .. (sold and " (auto-sold)" or " (kept)"))
+			end
+			Toast.ticker("Multi-Forge bonus: " .. table.concat(names, ", "), C.coin)
+		end
 		if payload.auto then
 			Toast.ticker(string.format("%s  🪙 %s", Data.weaponName(w), Format.abbr(w.v)), Theme.rarityColor(w.r))
 		elseif ForgeGame.isActive() then

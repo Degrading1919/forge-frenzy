@@ -5,6 +5,8 @@ local Players = game:GetService("Players")
 local Common = require(script.Parent.WorldUtil.Common)
 local Net = require(script.Parent.Parent.Net)
 local State = Common.State
+local Theme = require(script.Parent.Parent.UI.Theme)
+local Panels = require(script.Parent.Parent.UI.Panels)
 
 local WorldOnboarding = { Priority = 0 }
 
@@ -79,6 +81,21 @@ local function buildGui()
 	barFill.Size = UDim2.fromScale(0, 1)
 	barFill.Parent = bar
 	gui.Parent = Common.player:WaitForChild("PlayerGui")
+	local function resize()
+		local available = Panels.layer("Hud").AbsoluteSize
+		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
+		local narrow = available.X < 700
+		card.Size = UDim2.fromOffset(narrow and math.max(150, available.X - 194) or 270, narrow and 108 or 92)
+		card.Position = UDim2.new(1, -12, 0, available.Y < 440 and 126 or 70)
+		bodyL.TextSize = narrow and 17 or 20
+		bodyL.Size = UDim2.new(1, -24, 0, narrow and 58 or 42)
+	end
+	Panels.onViewportChanged(resize)
+	Panels.layer("Hud"):GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.Changed:Connect(function()
+		if card and card.Parent then card.Visible = not Panels.isOpen() end
+	end)
+	resize()
 end
 
 local function targetAtt(step)

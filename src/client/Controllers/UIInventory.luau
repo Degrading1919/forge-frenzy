@@ -72,15 +72,20 @@ local function refreshDetail(p)
 	if not w then
 		selectedId = nil
 		detail.frame.Visible = false
+		grid.Visible = true
 		return
 	end
 	detail.frame.Visible = true
+	grid.Visible = detail.frame.Parent.AbsoluteSize.X >= 580
 	local color = Theme.rarityColor(w.r)
 	detail.name.Text = Data.weaponName(w)
 	detail.rarity.Text = Theme.RarityNames[w.r]
 	detail.rarity.TextColor3 = color
 	detail.value.Text = "🪙 " .. Format.abbr(w.v)
 	detail.sell.Text = "Sell  🪙 " .. Format.abbr(w.v)
+	local displayed = p.showcase and table.find(p.showcase, w.id) ~= nil
+	if displayed then detail.sell.Text = "Clear pedestal to sell" end
+	Theme.setEnabled(detail.sell, not displayed)
 	detail.stroke.Color = color
 	if detail.shownId ~= w.id then
 		detail.shownId = w.id
@@ -105,16 +110,18 @@ local function rebuild(p)
 			if not t then
 				local color = Theme.rarityColor(w.r)
 				local f = Theme.make("TextButton", {
+					Name = w.id,
 					Text = "",
 					BackgroundColor3 = C.panel,
+					BackgroundTransparency = 0,
 					AutoButtonColor = false,
 					Corner = 10,
 					Stroke = { Color = color, Thickness = 2 },
 					Parent = grid,
 				})
-				local view = Theme.make("Frame", { Size = UDim2.new(1, -10, 1, -50), Position = UDim2.new(0, 5, 0, 5), BackgroundColor3 = Color3.fromRGB(24, 19, 17), Corner = 8, Parent = f })
+				local view = Theme.make("Frame", { Size = UDim2.new(1, -10, 1, -58), Position = UDim2.new(0, 5, 0, 5), BackgroundColor3 = Color3.fromRGB(24, 19, 17), Corner = 8, Parent = f })
 				local icon = Theme.make("TextLabel", { Text = Data.ClassIcons[w.c] or "⚔", Size = UDim2.new(1, 0, 1, 0), TextSize = 36, TextColor3 = Data.mat(w.m).color, Parent = view })
-				Theme.label({ Text = Data.weaponName(w), Size = UDim2.new(1, -6, 0, 24), Position = UDim2.new(0, 3, 1, -44), TextSize = 9, TextColor3 = color, Parent = f })
+				Theme.label({ Text = Data.weaponName(w), Size = UDim2.new(1, -6, 0, 32), Position = UDim2.new(0, 3, 1, -52), TextSize = 12, TextColor3 = color, Parent = f })
 				Theme.label({ Text = "🪙 " .. Format.abbr(w.v), Size = UDim2.new(1, 0, 0, 18), Position = UDim2.new(0, 0, 1, -20), TextSize = 12, TextColor3 = C.coin, Parent = f })
 				f.Activated:Connect(function()
 					selectedId = w.id
@@ -148,7 +155,7 @@ local function buildInventory()
 	sortBtn = Theme.button({
 		Text = "Sort: Value",
 		Color = C.panel2,
-		Size = UDim2.new(0, 130, 0, 40),
+		Size = UDim2.new(0, 130, 0, 44),
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(0.62, 0, 0, 0),
 		TextSize = Theme.ts(14),
@@ -160,7 +167,7 @@ local function buildInventory()
 		Parent = content,
 	})
 	local wide = not Theme.compact()
-	grid = Theme.scroll({ Size = UDim2.new(wide and 0.62 or 0.58, -6, 1, -44), Position = UDim2.new(0, 0, 0, 44), Parent = content })
+	grid = Theme.scroll({ Name = "Weapons", Size = UDim2.new(wide and 0.62 or 0.58, -6, 1, -44), Position = UDim2.new(0, 0, 0, 44), Parent = content })
 	local gl = Instance.new("UIGridLayout")
 	gl.CellSize = UDim2.new(0, wide and 104 or 92, 0, wide and 124 or 112)
 	gl.CellPadding = UDim2.new(0, 8, 0, 8)
@@ -168,23 +175,28 @@ local function buildInventory()
 	gl.Parent = grid
 	grid:GetPropertyChangedSignal("CanvasPosition"):Connect(queueCheck)
 
+	local detailScroll = Theme.scroll({ Name = "WeaponDetail", Size = UDim2.new(0.38, -6, 1, 0), Position = UDim2.new(0.62, 6, 0, 0), Visible = false, BackgroundTransparency = 0, BackgroundColor3 = C.panel, Corner = 12, Stroke = { Color = C.brass, Thickness = 2 }, Parent = content })
 	local f = Theme.make("Frame", {
-		Size = UDim2.new(wide and 0.38 or 0.42, -6, 1, 0),
-		Position = UDim2.new(wide and 0.62 or 0.58, 6, 0, 0),
+		Size = UDim2.new(1, -8, 0, 460),
+		Position = UDim2.new(),
 		BackgroundColor3 = C.panel,
 		Corner = 12,
 		Stroke = { Color = C.brass, Thickness = 2 },
-		Visible = false,
-		Parent = content,
+		Visible = true,
+		Parent = detailScroll,
 	})
-	detail.frame = f
-	detail.stroke = f:FindFirstChildOfClass("UIStroke")
+	detail.frame = detailScroll
+	detail.stroke = detailScroll:FindFirstChildOfClass("UIStroke")
+	local back = Theme.button({ Name = "Back", Text = "Back to weapons", Color = C.panel2, Size = UDim2.new(1, -16, 0, 44), Position = UDim2.new(0, 8, 0, 6), Parent = f, OnClick = function()
+		selectedId = nil detail.frame.Visible = false grid.Visible = true
+	end })
 	detail.view = Theme.make("Frame", { Size = UDim2.new(1, -16, 0.36, 0), Position = UDim2.new(0, 8, 0, 8), BackgroundColor3 = Color3.fromRGB(24, 19, 17), Corner = 8, Parent = f })
 	detail.vf = Theme.make("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = detail.view })
 	detail.rarity = Theme.make("TextLabel", { Text = "", Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 0.36, 12), TextSize = Theme.ts(20), Parent = f })
 	detail.name = Theme.label({ Text = "", Size = UDim2.new(1, -12, 0, 40), Position = UDim2.new(0, 6, 0.36, 36), TextSize = Theme.ts(13), Parent = f })
 	detail.value = Theme.make("TextLabel", { Text = "", Size = UDim2.new(1, 0, 0, 28), Position = UDim2.new(0, 0, 0.36, 78), TextSize = Theme.ts(22), TextColor3 = C.coin, Parent = f })
 	detail.sell = Theme.button({
+		Name = "Sell",
 		Text = "Sell",
 		Color = C.good,
 		Size = UDim2.new(1, -16, 0, 44),
@@ -198,6 +210,7 @@ local function buildInventory()
 		Parent = f,
 	})
 	Theme.button({
+		Name = "Display",
 		Text = "Display",
 		Color = Color3.fromRGB(70, 130, 220),
 		Size = UDim2.new(1, -16, 0, 44),
@@ -219,6 +232,25 @@ local function buildInventory()
 		end,
 		Parent = f,
 	})
+	local function resize()
+		local narrow = content.AbsoluteSize.X < 580
+		grid.Size = UDim2.new(narrow and 1 or 0.62, -6, 1, -50)
+		grid.Position = UDim2.new(0, 0, 0, 50)
+		sortBtn.Position = UDim2.new(narrow and 1 or 0.62, -6, 0, 0)
+		detailScroll.Size = UDim2.new(narrow and 1 or 0.38, -6, 1, narrow and -50 or 0)
+		detailScroll.Position = narrow and UDim2.new(0, 0, 0, 50) or UDim2.new(0.62, 6, 0, 0)
+		back.Visible = narrow
+		f.Size = UDim2.new(1, -8, 0, math.max(460, detailScroll.AbsoluteSize.Y))
+		detail.view.Position = UDim2.new(0, 8, 0, narrow and 56 or 8)
+		detail.view.Size = UDim2.new(1, -16, 0, narrow and 126 or 166)
+		detail.rarity.Position = UDim2.new(0, 0, 0, 190)
+		detail.name.Position = UDim2.new(0, 6, 0, 216)
+		detail.value.Position = UDim2.new(0, 0, 0, 260)
+		grid.Visible = not narrow or not detailScroll.Visible
+	end
+	content:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 end
 
 -- Showcase -----------------------------------------------------------------

@@ -2,16 +2,40 @@
 -- Assigns each player one of the six workshop plots, spawns them there, and publishes what other
 -- clients render: plot owner sign, ShowcaseData (JSON of displayed weapons), and the player's
 -- PlotIndex / EquippedPets attributes.
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-
-local Remotes = require(script.Parent.Remotes)
+local Players: any = nil
+local Remotes: any = nil
 
 local Plots = {}
+Plots.MAX_PLOTS = 6
 
 local owners: { [number]: Player } = {}
 local lastShowcase: { [Player]: string } = {}
 local lastPets: { [Player]: string } = {}
+local lastVisual: { [Player]: string } = {}
+
+local MACHINE_TRACKS = { "ExtractorOutput", "SmelterSpeed", "StorageCapacity", "FurnaceHeat", "AnvilFinish" }
+local GEAR_TRACKS = { "Hammer", "Gloves", "Apron" }
+local VISUAL_PASSES = { "TitanExcavator", "DragonFurnace", "VIPWorkshop" }
+
+local function finite(value: any, fallback: number, max: number): number
+	if type(value) ~= "number" or value ~= value or math.abs(value) == math.huge then return fallback end
+	return math.clamp(value, 0, max)
+end
+
+-- Deliberate projection: never replicate the authoritative profile or all entitlements.
+-- Verified flags come from MonetizationService (including isolated Studio overlays).
+function Plots.publicVisual(profile: any, verified: any, rates: any): any
+	local levels, gear, entitlements = {}, {}, {}
+	for _, key in MACHINE_TRACKS do levels[key] = math.floor(finite(profile.levels and profile.levels[key], 0, 1000)) end
+	for _, key in GEAR_TRACKS do gear[key] = math.floor(finite(profile.gear and profile.gear[key], 0, 1000)) end
+	for _, key in VISUAL_PASSES do entitlements[key] = verified and verified[key] == true or false end
+	return {
+		selectedMaterial = math.clamp(math.floor(finite(profile.selectedMaterial, 1, 32)), 1, 32),
+		levels = levels, gear = gear, entitlements = entitlements,
+		evolutionRank = math.floor(finite(profile.evolutionRank, 0, 1000000)),
+		rates = { orePerSec = finite(rates and rates.orePerSec, 1.5, 1e30) },
+	}
+end
 
 local function plotModel(index: number): Model?
 	local world = workspace:FindFirstChild("World")
@@ -50,20 +74,23 @@ local function spawnAtPlot(player: Player, character: Model)
 end
 
 local function assign(player: Player)
-	for i = 1, 6 do
+	if Plots.indexOf(player) > 0 then return true end
+	for i = 1, Plots.MAX_PLOTS do
 		if not owners[i] and plotModel(i) then
 			owners[i] = player
 			local plot = plotModel(i) :: Model
 			plot:SetAttribute("OwnerUserId", player.UserId)
+			plot:SetAttribute("VisualState", "")
 			setSign(i, player.DisplayName .. "'s Workshop")
 			player:SetAttribute("PlotIndex", i)
 			Remotes.session(player).plotIndex = i
 			Remotes.markDirty(player)
-			return
+			return true
 		end
 	end
-	-- More players than plots (server MaxPlayers should be 6); they can still use the hub.
 	player:SetAttribute("PlotIndex", 0)
+	player:Kick("This server is full: all workshops are occupied. Please join another Forge Frenzy server.")
+	return false
 end
 
 local function release(player: Player)
@@ -73,6 +100,7 @@ local function release(player: Player)
 		local plot = plotModel(i)
 		if plot then
 			plot:SetAttribute("OwnerUserId", 0)
+			plot:SetAttribute("VisualState", "")
 			local data = plot:FindFirstChild("ShowcaseData") :: StringValue?
 			if data then
 				data.Value = "[]"
@@ -82,10 +110,12 @@ local function release(player: Player)
 	end
 	lastShowcase[player] = nil
 	lastPets[player] = nil
+	lastVisual[player] = nil
 end
 
 -- Publishes showcase + equipped pets for one player when they change.
 local function publish(player: Player)
+	local HttpService = game:GetService("HttpService")
 	local Data = Remotes.svc("DataService")
 	local p = Data and Data.get(player)
 	if not p then
@@ -94,6 +124,18 @@ local function publish(player: Player)
 	local index = Plots.indexOf(player)
 	local plot = plotModel(index)
 	if plot then
+		local Monet = Remotes.svc("MonetizationService")
+		local Production = Remotes.svc("ProductionService")
+		local verified = Monet and Monet.ownedKeys and Monet.ownedKeys(player) or {}
+		local rates = Production and Production.rates and Production.rates(player) or {}
+		local visual = Plots.publicVisual(p, verified, rates)
+		visual.ownerUserId = player.UserId
+		local visualJson = HttpService:JSONEncode(visual)
+		if lastVisual[player] ~= visualJson then
+			lastVisual[player] = visualJson
+			plot:SetAttribute("VisualState", visualJson)
+			setSign(index, player.DisplayName .. "'s Workshop" .. (visual.evolutionRank > 0 and (" · Rank " .. visual.evolutionRank) or ""))
+		end
 		local entries = {}
 		for i = 1, 6 do
 			local id = p.showcase and p.showcase[i]
@@ -128,8 +170,10 @@ local function publish(player: Player)
 end
 
 function Plots.start()
+	Players = game:GetService("Players")
+	Remotes = require(script.Parent.Remotes)
 	local function onPlayer(player: Player)
-		assign(player)
+		if not assign(player) then return end
 		player.CharacterAdded:Connect(function(character)
 			spawnAtPlot(player, character)
 		end)

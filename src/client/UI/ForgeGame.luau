@@ -3,6 +3,7 @@
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Net = require(script.Parent.Parent.Net)
+local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Theme)
 local Data = require(script.Parent.Data)
 local Panels = require(script.Parent.Panels)
@@ -114,6 +115,7 @@ local function build()
 		BackgroundTransparency = 1,
 		Parent = stage,
 	})
+	ui.meter = meter
 	local mlim = Instance.new("UISizeConstraint")
 	mlim.MaxSize = Vector2.new(640, 30)
 	mlim.Parent = meter
@@ -150,7 +152,7 @@ local function build()
 		Parent = stage,
 	})
 	ui.note = Theme.label({
-		Text = "Preview only - the server decides your final luck.",
+		Text = "Tap HIT, press Space, or use controller A to hammer.",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0.58, 66),
 		Size = UDim2.new(0.9, 0, 0, 20),
@@ -176,6 +178,51 @@ local function build()
 		Parent = stage,
 	})
 	ui.hitScale.Parent = ui.hit
+	local function resize()
+		local available = root.AbsoluteSize
+		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
+		local short = available.Y < 440 and available.X >= 500
+		ui.title.TextSize = short and 30 or 40
+		ui.title.Size = UDim2.new(0.9, 0, 0, short and 38 or 50)
+		ui.title.Position = UDim2.new(0.5, 0, 0, 8)
+		ui.timer.Position = UDim2.new(0.5, 0, 0, short and 44 or 58)
+		ui.heat.Position = UDim2.new(0.5, 0, 0, short and 76 or 92)
+		ui.heat.Size = UDim2.new(0.8, 0, 0, 22)
+		if short then
+			ui.hits.Position = UDim2.new(0.22, 0, 0, 142)
+			ui.hits.Size = UDim2.new(0.32, 0, 0, 58)
+			ui.hits.TextSize = 52
+			ui.hitsSub.Position = UDim2.new(0.22, 0, 0, 173)
+			ui.luck.Position = UDim2.new(0.34, 0, 1, -65)
+			ui.luck.Size = UDim2.new(0.5, 0, 0, 30)
+			ui.luck.TextSize = 22
+			meter.Position = UDim2.new(0.34, 0, 1, -46)
+			meter.Size = UDim2.new(0.5, 0, 0, 30)
+			ui.hit.Position = UDim2.new(0.8, 0, 1, -16)
+			ui.hit.Size = UDim2.fromOffset(144, 144)
+			ui.hit.TextSize = 34
+			ui.note.Visible = false
+		else
+			ui.hits.Position = UDim2.new(0.5, 0, 0.32, 0)
+			ui.hits.Size = UDim2.new(0.6, 0, 0, 74)
+			ui.hits.TextSize = 64
+			ui.hitsSub.Position = UDim2.new(0.5, 0, 0.32, 37)
+			ui.luck.Position = UDim2.new(0.5, 0, 0.52, -18)
+			ui.luck.Size = UDim2.new(0.8, 0, 0, 34)
+			ui.luck.TextSize = 26
+			meter.Position = UDim2.new(0.5, 0, 0.52, 0)
+			meter.Size = UDim2.new(0.8, 0, 0, 30)
+			ui.hit.Position = UDim2.new(0.5, 0, 1, -18)
+			local hitSize = math.clamp(math.floor(available.Y * 0.23), 112, 180)
+			ui.hit.Size = UDim2.fromOffset(hitSize, hitSize)
+			ui.hit.TextSize = 36
+			ui.note.Position = UDim2.new(0.5, 0, 0.52, 66)
+			ui.note.Visible = available.Y >= 520
+		end
+	end
+	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 
 	-- spark pool
 	ui.sparks = {}
@@ -223,9 +270,11 @@ local function hit()
 	ui.hits.Text = tostring(hits)
 	ui.hitScale.Scale = 0.88
 	Theme.tween(ui.hitScale, 0.1, { Scale = 1 }, Enum.EasingStyle.Back)
-	ui.stage.Position = UDim2.new(0, math.random(-7, 7), 0, math.random(-7, 7))
-	Theme.tween(ui.stage, 0.07, { Position = UDim2.new(0, 0, 0, 0) })
-	spark()
+	if not (State.profile and State.profile.settings and State.profile.settings.vfx == false) then
+		ui.stage.Position = UDim2.new(0, math.random(-7, 7), 0, math.random(-7, 7))
+		Theme.tween(ui.stage, 0.07, { Position = UDim2.new(0, 0, 0, 0) })
+		spark()
+	end
 end
 
 local function setPhase(p: string)

@@ -30,21 +30,23 @@ local function refresh()
 		b.Text = on and "ON" or "OFF"
 		Theme.setColor(b, on and C.good or C.steel)
 	end
-	local cur = s.autoSellBelow or 1
+	local cur = math.max(1, s.autoSellBelow or 1)
 	for i, b in pickers do
 		Theme.setColor(b, i == cur and C.orange or C.panel2)
+		b.Text = SELL_LABELS[i] .. (i > 1 and not (p.entitlements and p.entitlements.CollectionMagnet) and " 🔒" or "")
 	end
 end
 
 function M.init()
 	local content
 	window, content = Panels.create("Settings", "Settings", { widthScale = 0.5, maxSize = Vector2.new(560, 600), onOpen = refresh })
-	local list = Theme.scroll({ Size = UDim2.new(1, 0, 1, 0), Parent = content })
+	local list = Theme.scroll({ Name = "SettingsList", Size = UDim2.new(1, 0, 1, 0), Parent = content })
 	Theme.list(list, 8)
 	for i, t in TOGGLES do
-		local row = Theme.make("Frame", { Size = UDim2.new(1, -8, 0, 54), BackgroundColor3 = C.panel, Corner = 10, LayoutOrder = i, Parent = list })
+		local row = Theme.make("Frame", { Name = "Setting_" .. t[1], Size = UDim2.new(1, -8, 0, 54), BackgroundColor3 = C.panel, Corner = 10, LayoutOrder = i, Parent = list })
 		Theme.label({ Text = t[2], Size = UDim2.new(1, -120, 1, 0), Position = UDim2.new(0, 12, 0, 0), TextXAlignment = Enum.TextXAlignment.Left, TextSize = Theme.ts(17), Parent = row })
 		toggles[t[1]] = Theme.button({
+			Name = "Toggle",
 			Text = "ON",
 			Color = C.good,
 			Size = UDim2.new(0, 90, 0, 44),
@@ -59,15 +61,17 @@ function M.init()
 		})
 	end
 	Theme.label({ Text = "AUTO-SELL WEAPONS", Size = UDim2.new(1, -8, 0, 28), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = Theme.ts(14), LayoutOrder = 10, Parent = list })
-	Theme.label({ Text = "Weapons below the chosen rarity are sold automatically instead of waiting for you.", Size = UDim2.new(1, -8, 0, 34), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(12), LayoutOrder = 11, Parent = list })
+	Theme.label({ Text = "Collection Magnet sells manual results below your chosen rarity. Free auto forging keeps Epic or better and sells the rest.", Size = UDim2.new(1, -8, 0, 54), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(12), LayoutOrder = 11, Parent = list })
 	for i, label in SELL_LABELS do
 		pickers[i] = Theme.button({
+			Name = "AutoSell_" .. tostring(i),
 			Text = label,
 			Color = C.panel2,
 			Size = UDim2.new(1, -8, 0, 46),
 			TextSize = Theme.ts(16),
 			LayoutOrder = 11 + i,
 			OnClick = function()
+				if i > 1 and not (State.profile and State.profile.entitlements and State.profile.entitlements.CollectionMagnet) then Panels.open("Shop") return end
 				set("autoSellBelow", i)
 			end,
 			Parent = list,

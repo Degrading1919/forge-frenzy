@@ -1,6 +1,7 @@
 --!nonstrict
 -- Always-on HUD: coins, selected material + storage, rail of panel buttons, FORGE button, auto chip.
 local Net = require(script.Parent.Parent.Net)
+local player = game:GetService("Players").LocalPlayer
 local State = require(script.Parent.Parent.State)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Format = require(script.Parent.Parent.UI.Format)
@@ -27,6 +28,22 @@ local refs = {}
 local coinValue = Instance.new("NumberValue")
 local coinTween
 
+local function refreshSave()
+	if not refs.save then return end
+	local p = State.profile
+	if not p then refs.save.Text = "Loading profile…" return end
+	local save = p.saveStatus or {}
+	local state = player:GetAttribute("FFSaveState") or save.saveState or "Loading"
+	local delayed = state == "SaveDelayed" or state == "Unavailable" or save.mode == "Unavailable"
+	if p.isStudio then
+		refs.save.Text = save.persistent == true and "Studio: isolated save" or "Studio: session only"
+		if delayed then refs.save.Text ..= " (delayed)" end
+	else
+		refs.save.Text = delayed and "Saving delayed — stay connected" or (state == "Saved" and "Progress saved" or (state == "Loaded" and "Progress loaded" or "Saving progress…"))
+	end
+	refs.save.TextColor3 = delayed and C.bad or C.dim
+end
+
 local function build()
 	local layer = Panels.layer("Hud")
 
@@ -42,6 +59,7 @@ local function build()
 		Stroke = { Color = C.brass, Thickness = 3 },
 		Parent = layer,
 	})
+	refs.coinCard = coins
 	local lim = Instance.new("UISizeConstraint")
 	lim.MinSize = Vector2.new(170, 48)
 	lim.MaxSize = Vector2.new(340, 64)
@@ -63,13 +81,14 @@ local function build()
 		TextWrapped = false,
 		Parent = coins,
 	})
+	refs.save = Theme.label({ Name = "SaveStatus", Text = "Loading profile…", Size = UDim2.new(0, 230, 0, 20), Position = UDim2.new(1, -238, 1, -24), TextSize = 12, TextColor3 = C.dim, TextXAlignment = Enum.TextXAlignment.Right, Parent = layer })
 
 	-- Auto chip
 	refs.chip = Theme.make("Frame", {
 		Name = "AutoChip",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 70),
-		Size = UDim2.new(0, 270, 0, 40),
+		Size = UDim2.new(0, 270, 0, 48),
 		BackgroundColor3 = C.bg,
 		Visible = false,
 		Corner = 20,
@@ -86,9 +105,10 @@ local function build()
 		Parent = refs.chip,
 	})
 	Theme.button({
+		Name = "StopAutoForge",
 		Text = "Stop",
 		Color = C.bad,
-		Size = UDim2.new(0, 80, 0, 32),
+		Size = UDim2.new(0, 80, 0, 44),
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -4, 0.5, 0),
 		TextSize = Theme.ts(16),
@@ -163,11 +183,12 @@ local function build()
 	Theme.list(rail, 6)
 	for i, def in RAIL do
 		local b = Theme.button({
+			Name = "Nav" .. def[3],
 			Text = def[1],
 			Color = C.panel2,
-			Size = UDim2.new(0, 54, 0, 54),
+			Size = UDim2.new(0, 74, 0, 62),
 			LayoutOrder = i,
-			TextSize = 26,
+			TextSize = 24,
 			Font = Theme.Font2,
 			OnClick = function()
 				Panels.toggle(def[3])
@@ -176,9 +197,9 @@ local function build()
 		})
 		Theme.make("TextLabel", {
 			Text = def[2],
-			Size = UDim2.new(1, 0, 0, 12),
-			Position = UDim2.new(0, 0, 1, -13),
-			TextSize = 9,
+			Size = UDim2.new(1, 0, 0, 18),
+			Position = UDim2.new(0, 0, 1, -19),
+			TextSize = 12,
 			Font = Theme.Font2,
 			TextColor3 = C.dim,
 			TextWrapped = false,
@@ -201,6 +222,36 @@ local function build()
 		end,
 		Parent = layer,
 	})
+	local function resize()
+		local available = layer.AbsoluteSize
+		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
+		local narrow = available.X < 700
+		local short = available.Y < 440
+		coins.Size = UDim2.fromOffset(narrow and 200 or 280, 52)
+		refs.coins.TextSize = narrow and 28 or 32
+		card.Position = UDim2.fromOffset(8, 70)
+		card.Size = UDim2.fromOffset(narrow and 170 or 240, 94)
+		refs.rates.TextSize = 12
+		refs.matName.TextSize = narrow and 16 or 20
+		rail.Position = UDim2.fromOffset(8, 174)
+		rail.Size = UDim2.new(0, 80, 1, narrow and not short and -312 or -190)
+		refs.forge.Size = UDim2.fromOffset(narrow and 180 or 220, short and 52 or 58)
+		refs.forge.TextSize = 28
+		if narrow and not short then
+			refs.chip.AnchorPoint = Vector2.new(0.5, 1)
+			refs.chip.Position = UDim2.new(0.5, 0, 1, -82)
+			refs.save.Position = UDim2.new(1, -238, 1, -4)
+			refs.save.AnchorPoint = Vector2.new(0, 1)
+		else
+			refs.chip.AnchorPoint = Vector2.new(1, 0)
+			refs.chip.Position = UDim2.new(1, -8, 0, 70)
+			refs.save.Position = UDim2.new(1, -238, 1, -24)
+			refs.save.AnchorPoint = Vector2.new()
+		end
+	end
+	layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 end
 
 local function onProfile(p)
@@ -222,9 +273,10 @@ local function onProfile(p)
 	Theme.setBar(refs.bar, cap > 0 and total / cap or 0, string.format("%s ingots  %s/%s", Format.abbr(mine), Format.abbr(total), Format.abbr(cap)))
 	refs.bar.Fill.BackgroundColor3 = (cap > 0 and total >= cap) and C.bad or C.orange
 	refs.rates.Text = string.format("⛏ %s ore/min   🔩 %s ingots/min", Format.rate(rates.orePerSec), Format.rate(rates.ingotPerSec))
+	refreshSave()
 
 	local mode = p.autoMode or "off"
-	refs.chip.Visible = mode ~= "off"
+	refs.chip.Visible = mode ~= "off" and not Panels.isOpen()
 	if mode ~= "off" then
 		refs.chipText.Text = mode == "premium" and "AUTO FORGE  4x luck" or "AUTO FORGE  1.5x luck"
 	end
@@ -235,6 +287,9 @@ local function refreshVisibility()
 	refs.forge.Visible = not open
 	refs.card.Visible = not open
 	refs.rail.Visible = not open
+	refs.coinCard.Visible = not Panels.isOpen("ForgeGame") and not Panels.isOpen("ForgeReveal")
+	refs.chip.Visible = not open and State.profile and State.profile.autoMode ~= "off" and State.profile.autoMode ~= nil
+	refs.save.Visible = not open
 end
 
 function M.init()
@@ -245,6 +300,8 @@ function M.init()
 	Panels.Changed:Connect(refreshVisibility)
 	refreshVisibility()
 	State.observe(onProfile)
+	player:GetAttributeChangedSignal("FFSaveState"):Connect(refreshSave)
+	player:GetAttributeChangedSignal("FFLastSavedAt"):Connect(refreshSave)
 end
 
 return M

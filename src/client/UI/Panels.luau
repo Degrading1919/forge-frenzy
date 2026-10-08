@@ -26,7 +26,7 @@ function Panels.gui(): ScreenGui
 	gui = Theme.make("ScreenGui", {
 		Name = "ForgeFrenzyUI",
 		ResetOnSpawn = false,
-		IgnoreGuiInset = true,
+		IgnoreGuiInset = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		DisplayOrder = 5,
 		Parent = pg,
@@ -59,6 +59,9 @@ function Panels.layer(name: string): Frame
 		Parent = Panels.gui(),
 	})
 	layers[name] = f
+	f:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		for _, fn in resizers do fn() end
+	end)
 	return f
 end
 
@@ -174,13 +177,16 @@ function Panels.create(name: string, title: string, opts: { [string]: any }?): (
 	sc.Parent = window
 	local limit = Instance.new("UISizeConstraint")
 	limit.MaxSize = opts.maxSize or Vector2.new(900, 640)
-	limit.MinSize = Vector2.new(280, 220)
+	limit.MinSize = Vector2.new(0, 0)
 	limit.Parent = window
 	local function resize()
+		local available = Panels.layer("Panels").AbsoluteSize
+		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
+		local max = opts.maxSize or Vector2.new(900, 640)
 		if Theme.compact() then
-			window.Size = UDim2.new(0.97, 0, 0.94, 0)
+			window.Size = UDim2.fromOffset(math.min(max.X, available.X - 16), math.min(max.Y, available.Y - 16))
 		else
-			window.Size = UDim2.new(opts.widthScale or 0.64, 0, opts.heightScale or 0.8, 0)
+			window.Size = UDim2.fromOffset(math.min(max.X, available.X * (opts.widthScale or 0.64)), math.min(max.Y, available.Y * (opts.heightScale or 0.8)))
 		end
 	end
 	resize()

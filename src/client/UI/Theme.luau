@@ -41,7 +41,12 @@ function Theme.viewport(): Vector2
 end
 
 function Theme.compact(): boolean
-	return Theme.viewport().X < 700
+	local size = Theme.viewport()
+	return size.X < 700 or size.Y < 500
+end
+
+function Theme.short(): boolean
+	return Theme.viewport().Y < 500
 end
 
 -- Text size helper: shrinks slightly on phones.
@@ -166,6 +171,7 @@ function Theme.button(props: { [string]: any }): TextButton
 	p.OnClick = nil
 	p.Color = nil
 	p.BackgroundColor3 = base
+	if p.BackgroundTransparency == nil then p.BackgroundTransparency = 0 end
 	p.AutoButtonColor = false
 	p.Text = p.Text or ""
 	p.TextSize = p.TextSize or Theme.ts(20)

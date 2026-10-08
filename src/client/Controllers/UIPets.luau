@@ -17,6 +17,7 @@ local petsWin, petsList, slotsLabel, bonusLabel
 local petRows = {}
 local petsSig = ""
 local eggRowBuilt = false
+local releaseId = nil
 
 local function isEquipped(p, id: string): boolean
 	return table.find(p.equipped or {}, id) ~= nil
@@ -60,16 +61,16 @@ local function refreshPets()
 		local def = Data.companion(pet.kind)
 		local color = Data.petRarityColor(def.rarity)
 		local eq = isEquipped(p, pet.id)
-		local f = Theme.make("Frame", { Size = UDim2.new(1, -8, 0, 60), BackgroundColor3 = eq and C.panel2 or C.panel, Corner = 8, Stroke = { Color = color, Thickness = eq and 3 or 1.5 }, LayoutOrder = 10 + i, Parent = petsList })
-		Theme.make("Frame", { Size = UDim2.new(0, 36, 0, 36), Position = UDim2.new(0, 10, 0.5, -18), BackgroundColor3 = def.color or color, Corner = 18, Stroke = { Color = color, Thickness = 2 }, Parent = f })
-		Theme.label({ Text = def.name .. "  (" .. tostring(def.rarity) .. ")", Size = UDim2.new(1, -190, 0, 24), Position = UDim2.new(0, 56, 0, 8), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = color, TextSize = Theme.ts(15), TextWrapped = false, Parent = f })
-		Theme.label({ Text = Data.bonusText(def.bonus), Size = UDim2.new(1, -190, 0, 20), Position = UDim2.new(0, 56, 0, 32), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(12), TextWrapped = false, Parent = f })
+		local f = Theme.make("Frame", { Name = pet.id, Size = UDim2.new(1, -8, 0, 108), BackgroundColor3 = eq and C.panel2 or C.panel, Corner = 8, Stroke = { Color = color, Thickness = eq and 3 or 1.5 }, LayoutOrder = 10 + i, Parent = petsList })
+		Theme.make("Frame", { Size = UDim2.new(0, 36, 0, 36), Position = UDim2.new(0, 10, 0, 10), BackgroundColor3 = def.color or color, Corner = 18, Stroke = { Color = color, Thickness = 2 }, Parent = f })
+		Theme.label({ Text = def.name .. "  (" .. tostring(def.rarity) .. ")", Size = UDim2.new(1, -68, 0, 24), Position = UDim2.new(0, 56, 0, 6), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = color, TextSize = Theme.ts(15), TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = f })
+		Theme.label({ Text = Data.bonusText(def.bonus), Size = UDim2.new(1, -68, 0, 22), Position = UDim2.new(0, 56, 0, 30), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(12), Parent = f })
 		Theme.button({
+			Name = "Equip",
 			Text = eq and "Unequip" or "Equip",
 			Color = eq and C.steel or C.good,
-			Size = UDim2.new(0, 110, 0, 44),
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -8, 0.5, 0),
+			Size = UDim2.new(0.5, -12, 0, 44),
+			Position = UDim2.new(0, 8, 1, -50),
 			TextSize = Theme.ts(16),
 			OnClick = function()
 				local ok, res = Net.call(eq and "UnequipPet" or "EquipPet", pet.id)
@@ -77,22 +78,43 @@ local function refreshPets()
 			end,
 			Parent = f,
 		})
+		if not def.premium then
+			local release
+			release = Theme.button({ Name = "Release", Text = releaseId == pet.id and "Confirm release" or "Release", Color = C.bad,
+				Size = UDim2.new(0.5, -12, 0, 44), Position = UDim2.new(0.5, 4, 1, -50), TextSize = Theme.ts(14), Parent = f,
+				OnClick = function()
+					if releaseId ~= pet.id then
+						releaseId = pet.id
+						petsSig = ""
+						refreshPets()
+						Toast.show("Tap Confirm release to permanently remove this companion", "info")
+						return
+					end
+					local ok, res = Net.call("ReleasePet", pet.id)
+					releaseId = nil
+					if not ok then Toast.show(res, "bad") end
+				end })
+		end
 		table.insert(petRows, f)
 	end
 end
 
 local function buildPets()
 	local content
-	petsWin, content = Panels.create("Pets", "Companions", { onOpen = function() petsSig = "" refreshPets() end })
+	petsWin, content = Panels.create("Pets", "Companions", { onOpen = function() releaseId = nil petsSig = "" refreshPets() end })
 	slotsLabel = Theme.label({ Text = "", Size = UDim2.new(0.4, 0, 0, 26), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.coin, TextSize = Theme.ts(16), Parent = content })
-	bonusLabel = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 26), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = content })
-	local eggs = Theme.make("Frame", { Size = UDim2.new(1, 0, 0, 50), Position = UDim2.new(0, 0, 0, 52), BackgroundTransparency = 1, Parent = content })
+	bonusLabel = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 32), Position = UDim2.new(0, 0, 0, 46), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = content })
+	Theme.button({ Name = "EquipBest", Text = "Equip best", Color = C.good, Size = UDim2.new(0, 126, 0, 44), Position = UDim2.new(1, -126, 0, 0), TextSize = Theme.ts(14), Parent = content, OnClick = function()
+		local ok, res = Net.call("EquipBestPets") if not ok then Toast.show(res, "bad") end
+	end })
+	local eggs = Theme.make("ScrollingFrame", { Name = "Eggs", Size = UDim2.new(1, 0, 0, 56), Position = UDim2.new(0, 0, 0, 82), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(), ScrollingDirection = Enum.ScrollingDirection.X, ScrollBarThickness = 4, Parent = content })
 	Theme.list(eggs, 6, Enum.FillDirection.Horizontal)
 	for i, egg in Data.eggs() do
 		Theme.button({
 			Text = "🥚 " .. egg.name .. "\n🪙 " .. Format.abbr(egg.coinCost),
 			Color = egg.color or C.orange,
-			Size = UDim2.new(0, 120, 1, 0),
+			Name = egg.id,
+			Size = UDim2.new(0, 120, 0, 50),
 			TextSize = Theme.ts(12),
 			LayoutOrder = i,
 			OnClick = function()
@@ -101,7 +123,7 @@ local function buildPets()
 			Parent = eggs,
 		})
 	end
-	petsList = Theme.scroll({ Size = UDim2.new(1, 0, 1, -108), Position = UDim2.new(0, 0, 0, 108), Parent = content })
+	petsList = Theme.scroll({ Name = "Owned", Size = UDim2.new(1, 0, 1, -146), Position = UDim2.new(0, 0, 0, 146), Parent = content })
 	Theme.list(petsList, 6)
 end
 
@@ -118,13 +140,15 @@ local function refreshHatch()
 	if not egg or not hatchWin or not hatchWin.Visible then return end
 	local coins = p and p.coins or 0
 	local multi = p and p.entitlements and p.entitlements.MultiHatch
+	local tierLocked = math.max(p and p.unlockedTier or 1, p and p.highestTierEver or 1) < (egg.unlockTier or 1)
 	hatchUI.name.Text = egg.name
 	hatchUI.name.TextColor3 = egg.color or C.orange
 	hatchUI.info.Text = string.format("Cost: 🪙 %s per egg   -   Requires material tier %d", Format.abbr(egg.coinCost), egg.unlockTier or 1)
 	for count, b in hatchUI.buttons do
+		local restricted = count > 1 and p and p.paidRandomAllowed == false
 		local locked = count > 1 and not multi
-		b.Text = locked and string.format("Hatch x%d 🔒", count) or string.format("Hatch x%d\n🪙 %s", count, Format.abbr(egg.coinCost * count))
-		Theme.setEnabled(b, locked or (coins >= egg.coinCost * count and not hatching))
+		b.Text = tierLocked and "Unlock tier " .. tostring(egg.unlockTier) or restricted and "Unavailable" or locked and string.format("Hatch x%d 🔒", count) or string.format("Hatch x%d\n🪙 %s", count, Format.abbr(egg.coinCost * count))
+		Theme.setEnabled(b, not tierLocked and not restricted and (locked or (coins >= egg.coinCost * count and not hatching)))
 	end
 end
 
@@ -136,12 +160,13 @@ local function buildHatch()
 		refreshHatch()
 	end })
 	hatchUI.name = Theme.make("TextLabel", { Text = "", Size = UDim2.new(1, 0, 0, 34), TextSize = Theme.ts(26), Parent = hatchContent })
-	hatchUI.info = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 34), TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = hatchContent })
+	hatchUI.info = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 44), Position = UDim2.new(0, 0, 0, 34), TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = hatchContent })
 	local row = Theme.make("Frame", { Size = UDim2.new(1, 0, 0, 56), Position = UDim2.new(0, 0, 1, -56), BackgroundTransparency = 1, Parent = hatchContent })
 	Theme.list(row, 8, Enum.FillDirection.Horizontal)
 	hatchUI.buttons = {}
 	for i, count in { 1, 3, 5 } do
 		hatchUI.buttons[count] = Theme.button({
+			Name = "Hatch" .. count,
 			Text = "",
 			Color = count == 1 and C.orange or Color3.fromRGB(150, 90, 220),
 			Size = UDim2.new(1 / 3, -6, 1, 0),
@@ -153,8 +178,8 @@ local function buildHatch()
 			Parent = row,
 		})
 	end
-	Theme.label({ Text = "ODDS", Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 62), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, Parent = hatchContent })
-	scroll = Theme.scroll({ Size = UDim2.new(1, 0, 1, -146), Position = UDim2.new(0, 0, 0, 84), Parent = hatchContent })
+	Theme.label({ Text = "ODDS", Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 82), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, Parent = hatchContent })
+	scroll = Theme.scroll({ Size = UDim2.new(1, 0, 1, -170), Position = UDim2.new(0, 0, 0, 108), Parent = hatchContent })
 	Theme.list(scroll, 4)
 	local oddsRows = {}
 	function hatchUI.rebuildOdds()
@@ -176,18 +201,18 @@ end
 local rev = {}
 
 local function buildReveal()
-	local root = Theme.make("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 6, 5), BackgroundTransparency = 0.15, ClipsDescendants = true, Parent = Panels.layer("Panels") })
+	local root = Theme.make("Frame", { Name = "HatchReveal", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 6, 5), BackgroundTransparency = 0.15, ClipsDescendants = true, Parent = Panels.layer("Panels") })
 	rev.root = root
 	rev.egg = Theme.make("TextLabel", { Text = "🥚", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 160, 0, 160), TextSize = 120, Parent = root })
-	rev.cards = Theme.make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.46, 0), Size = UDim2.new(0.94, 0, 0.7, 0), BackgroundTransparency = 1, Visible = false, Parent = root })
+	rev.cards = Theme.scroll({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 12), Size = UDim2.new(0.94, 0, 1, -88), Visible = false, Parent = root })
 	local gl = Instance.new("UIGridLayout")
 	gl.CellSize = UDim2.new(0, Theme.compact() and 110 or 150, 0, Theme.compact() and 150 or 200)
 	gl.CellPadding = UDim2.new(0, 10, 0, 10)
 	gl.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	gl.VerticalAlignment = Enum.VerticalAlignment.Center
+	gl.VerticalAlignment = Enum.VerticalAlignment.Top
 	gl.SortOrder = Enum.SortOrder.LayoutOrder
 	gl.Parent = rev.cards
-	rev.ok = Theme.button({ Text = "Awesome!", Color = C.orange, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -20), Size = UDim2.new(0, 200, 0, 52), Visible = false, OnClick = function() Panels.close(true) end, Parent = root })
+	rev.ok = Theme.button({ Name = "Continue", Text = "Awesome!", Color = C.orange, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -20), Size = UDim2.new(0, 200, 0, 52), Visible = false, OnClick = function() Panels.close(true) end, Parent = root })
 	Panels.register("HatchReveal", root, nil, { locked = true, fullscreen = true, noBackdrop = true })
 end
 
@@ -237,6 +262,7 @@ end
 function M.hatch(count: number)
 	if hatching or not hatchEggId then return end
 	local p = State.profile
+	if count > 1 and p and p.paidRandomAllowed == false then Toast.show("Premium random features are unavailable for this account", "bad") return end
 	if count > 1 and not (p and p.entitlements and p.entitlements.MultiHatch) then
 		Toast.show("Multi-Hatch is a Shop item", "info")
 		Panels.open("Shop")

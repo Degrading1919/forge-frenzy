@@ -90,6 +90,7 @@ local function confirm(protected: boolean)
 end
 
 local function celebrate(rank)
+	if State.profile and State.profile.settings and State.profile.settings.vfx == false then return end
 	local root = Panels.layer("Toast")
 	local f = Theme.make("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.coin, BackgroundTransparency = 0.3, ZIndex = 40, Parent = root })
 	local t = Theme.make("TextLabel", { Text = "EVOLVED!\nRank " .. tostring(rank), Size = UDim2.new(1, 0, 1, 0), TextSize = 64, TextColor3 = C.bg, ZIndex = 41, Parent = f })
@@ -121,6 +122,15 @@ end
 local function build()
 	local content
 	window, content = Panels.create("Evolution", "Blacksmith Evolution", { onOpen = fetch })
+	local outer = content
+	local scroll = Theme.scroll({ Name = "Details", Size = UDim2.new(1, 0, 1, 0), Parent = outer })
+	content = Theme.make("Frame", { Name = "Body", Size = UDim2.new(1, -8, 0, 500), BackgroundTransparency = 1, Parent = scroll })
+	local function resize()
+		content.Size = UDim2.new(1, -8, 0, math.max(500, outer.AbsoluteSize.Y))
+	end
+	outer:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	Panels.onViewportChanged(resize)
+	resize()
 	ui.rank = Theme.make("TextLabel", { Text = "", Size = UDim2.new(1, 0, 0, 30), TextSize = Theme.ts(20), TextColor3 = C.coin, Parent = content })
 	ui.next = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 30), TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = content })
 	ui.forged = Theme.bar({ Size = UDim2.new(1, 0, 0, 26), Position = UDim2.new(0, 0, 0, 56), FillColor = C.orange, Parent = content })
@@ -135,6 +145,7 @@ local function build()
 	end
 	ui.protHint = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 1, -106), TextColor3 = C.dim, TextSize = Theme.ts(11), Parent = content })
 	ui.evolve = Theme.button({
+		Name = "Evolve",
 		Text = "EVOLVE",
 		Color = C.orange,
 		Size = UDim2.new(0.5, -4, 0, 56),
@@ -146,6 +157,7 @@ local function build()
 		Parent = content,
 	})
 	ui.prot = Theme.button({
+		Name = "Protected",
 		Text = "Protected Evolve",
 		Color = Color3.fromRGB(150, 90, 220),
 		Size = UDim2.new(0.5, -4, 0, 56),
@@ -163,10 +175,11 @@ local function build()
 		Parent = content,
 	})
 	-- confirm dialog
-	ui.confirm = Theme.make("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.35, Visible = false, ZIndex = 10, Parent = content })
-	local box = Theme.make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.9, 0, 0, 170), BackgroundColor3 = C.bg, Corner = 12, Stroke = { Color = C.orange, Thickness = 3 }, ZIndex = 11, Parent = ui.confirm })
+	ui.confirm = Theme.make("Frame", { Name = "Confirm", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.35, Visible = false, ZIndex = 10, Parent = outer })
+	local box = Theme.make("Frame", { Name = "Dialog", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.9, 0, 0, 170), BackgroundColor3 = C.bg, Corner = 12, Stroke = { Color = C.orange, Thickness = 3 }, ZIndex = 11, Parent = ui.confirm })
 	ui.confirmText = Theme.label({ Text = "", Size = UDim2.new(1, -20, 0, 80), Position = UDim2.new(0, 10, 0, 8), TextSize = Theme.ts(15), ZIndex = 12, Parent = box })
 	ui.confirmYes = Theme.button({
+		Name = "Accept",
 		Text = "Evolve",
 		Color = C.orange,
 		Size = UDim2.new(0.5, -14, 0, 50),
@@ -197,7 +210,15 @@ function M.init()
 	build()
 	State.observe(function()
 		if window.Visible then
-			if os.clock() - lastFetch > 2 then task.spawn(fetch) else render() end
+			local p = State.profile
+			if not status or (p and p.evolutionRank ~= status.rank) then
+				task.spawn(fetch)
+			else
+				status.progress = { forged = p.forgedSinceEvolve, tier = p.highestTierSinceEvolve }
+				status.eligible = p.evolutionEligible
+				status.protectedCharges = p.evolveCharges
+				render()
+			end
 		end
 	end)
 	Net.on("Evolved", function(p)

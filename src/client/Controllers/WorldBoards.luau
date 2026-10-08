@@ -98,6 +98,7 @@ local function buildBoard(model, screen)
 	empty.Text = "No records yet"
 	empty.Visible = true
 	b.empty = empty
+	b.scope = label(gui, UDim2.new(0, 15, 1, -38), UDim2.new(1, -30, 0, 30), Enum.TextXAlignment.Center, Enum.Font.GothamBold, 22)
 	return b
 end
 
@@ -162,6 +163,7 @@ local function refresh()
 	end
 	for _, b in boards do
 		render(b, data[b.metric])
+		b.scope.Text = (data.scopes and data.scopes[b.metric]) or "This server"
 	end
 end
 

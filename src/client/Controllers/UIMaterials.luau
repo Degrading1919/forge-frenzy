@@ -57,6 +57,7 @@ local function build()
 	local content
 	window, content = Panels.create("Materials", "Materials", { onOpen = refresh })
 	unlockBtn = Theme.button({
+		Name = "UnlockNext",
 		Text = "",
 		Color = C.good,
 		Size = UDim2.new(1, 0, 0, 48),
@@ -86,6 +87,7 @@ local function build()
 			})
 		end
 		local f = Theme.make("Frame", {
+			Name = "Material_" .. i,
 			Size = UDim2.new(1, -8, 0, 58),
 			BackgroundColor3 = C.panel,
 			Corner = 8,
@@ -105,7 +107,7 @@ local function build()
 			TextWrapped = false,
 			Parent = f,
 		})
-		Theme.label({
+		local valueLabel = Theme.label({
 			Text = Format.abbr(mat.priceMin) .. " - " .. Format.abbr(mat.priceMax) .. " coins",
 			Size = UDim2.new(0.4, -20, 0, 18),
 			Position = UDim2.new(0, 22, 0, 31),
@@ -144,6 +146,17 @@ local function build()
 			Parent = f,
 		})
 		rows[i] = { frame = f, name = name, pips = pips, btn = btn, lock = lock, stroke = f:FindFirstChildOfClass("UIStroke") }
+		local function resize()
+			local narrow = f.AbsoluteSize.X < 540
+			f.Size = UDim2.new(1, -8, 0, narrow and 82 or 58)
+			name.Size = narrow and UDim2.new(1, -138, 0, 24) or UDim2.new(0.4, -20, 0, 24)
+			valueLabel.Size = narrow and UDim2.new(1, -138, 0, 18) or UDim2.new(0.4, -20, 0, 18)
+			pipRow.Size = UDim2.new(0, 102, 0, 14)
+			pipRow.Position = narrow and UDim2.new(0, 22, 0, 58) or UDim2.new(0.4, 0, 0.5, -7)
+		end
+		f:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+		Panels.onViewportChanged(resize)
+		resize()
 	end
 end
 

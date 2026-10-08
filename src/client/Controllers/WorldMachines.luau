@@ -2,6 +2,7 @@
 -- Cheap, distance-culled machine animation on all plots.
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local Common = require(script.Parent.WorldUtil.Common)
 local State = Common.State
@@ -17,8 +18,10 @@ local N_CUBES = 6
 
 local plotData = {} -- [plot] = data
 local t = 0
-local lastLevelSig = nil
-local upgradeOwner = nil -- plot whose upgrades are applied
+local refreshVisual
+
+local GOLD = Color3.fromRGB(222, 176, 73)
+local DRAGON = Color3.fromRGB(150, 68, 45)
 
 -- track -> { machine, anchor part, orbit radius, light color }
 local UPGRADES = {
@@ -34,7 +37,7 @@ local function scan(plot)
 	if not machines then
 		return nil
 	end
-	local d = { plot = plot, ang = 0, cubePhase = 0, fillH = 0.4, orbs = {}, levels = {} }
+	local d = { plot = plot, ang = 0, cubePhase = 0, fillH = 0.4, orbs = {}, levels = {}, accents = {} }
 	local ok, cf = pcall(function()
 		return plot:GetPivot()
 	end)
@@ -73,6 +76,14 @@ local function scan(plot)
 	if a0 and a1 then
 		d.beltA, d.beltB = a0.WorldPosition, a1.WorldPosition
 	end
+	for _, machine in machines:GetChildren() do
+		for _, piece in machine:GetChildren() do
+			local name = piece.Name
+			if piece:IsA("BasePart") and (name == "Base" or name == "DrillHousing" or name == "TopFrame" or name == "Dome" or name == "Stack" or name == "Face") then
+				table.insert(d.accents, { part = piece, machine = machine.Name, name = name, color = piece.Color, material = piece.Material })
+			end
+		end
+	end
 	return d
 end
 
@@ -83,7 +94,19 @@ local function ensureScanned()
 	end
 	for _, plot in plots:GetChildren() do
 		if not plotData[plot] then
-			plotData[plot] = scan(plot) or nil
+			local d = scan(plot)
+			plotData[plot] = d
+			if d then
+				local function changed()
+					local raw = plot:GetAttribute("VisualState")
+					local ok, public = pcall(HttpService.JSONDecode, HttpService, type(raw) == "string" and raw ~= "" and raw or "{}")
+					d.public = ok and type(public) == "table" and public or nil
+					if refreshVisual then refreshVisual(d) end
+				end
+				plot:GetAttributeChangedSignal("VisualState"):Connect(changed)
+				plot:GetAttributeChangedSignal("OwnerUserId"):Connect(changed)
+				changed()
+			end
 		end
 	end
 end
@@ -183,6 +206,8 @@ local function applyTrack(d, track, level)
 			p.CanQuery = false
 			p.CanTouch = false
 			p.CastShadow = false
+			local angle = k * math.pi / 2 + r
+			p.Position = anchor.Position + Vector3.new(math.cos(angle) * cfg[3], (r - 1) * 0.9, math.sin(angle) * cfg[3])
 			p.Parent = model
 			table.insert(list, { part = p, ring = r, k = k })
 		end
@@ -192,40 +217,52 @@ local function applyTrack(d, track, level)
 	d.orbs[track] = list
 end
 
-local function applyLevels(profile)
-	local plot = Common.myPlot()
-	if upgradeOwner and upgradeOwner ~= plot then
-		local od = plotData[upgradeOwner]
-		if od then
-			for track in UPGRADES do
-				applyTrack(od, track, 0)
-			end
-		end
-		upgradeOwner = nil
-	end
-	local d = plot and plotData[plot]
-	if not d then
-		return
-	end
-	upgradeOwner = plot
+local function visualProfile(d)
+	if (d.plot:GetAttribute("OwnerUserId") or 0) == 0 then return nil end
+	if d.plot == Common.myPlot() then return State.profile end
+	local public = d.public
+	return public and public.ownerUserId == d.plot:GetAttribute("OwnerUserId") and public or nil
+end
+
+refreshVisual = function(d)
+	local profile = visualProfile(d)
 	local levels = profile and profile.levels or {}
+	local passes = profile and profile.entitlements or {}
+	local gear = profile and profile.gear or {}
+	local parts = {}
 	for track in UPGRADES do
-		applyTrack(d, track, levels[track] or 0)
+		table.insert(parts, tostring(levels[track] or 0))
+	end
+	for _, key in { "TitanExcavator", "DragonFurnace", "VIPWorkshop" } do table.insert(parts, tostring(passes[key] == true)) end
+	table.insert(parts, tostring(gear.Hammer or 0))
+	table.insert(parts, tostring(profile and profile.selectedMaterial or 0))
+	local sig = table.concat(parts, ",")
+	if sig == d.visualSig then return end
+	d.visualSig = sig
+	-- Material identity is replicated appearance, even outside the animation culling radius
+	-- or when Studio/headless clients do not render frames. Only motion needs RenderStepped.
+	local materialColor = profile and Common.materialColor(profile.selectedMaterial) or nil
+	if d.gem then d.gem.Color = materialColor or d.gemColor0 end
+	if d.fill then d.fill.Color = materialColor or d.fillColor0 end
+	for track in UPGRADES do applyTrack(d, track, levels[track] or 0) end
+	for _, accent in d.accents do
+		local color, material = accent.color, accent.material
+		if passes.VIPWorkshop and accent.name == "Base" then
+			color, material = GOLD:Lerp(accent.color, 0.35), Enum.Material.Metal
+		elseif passes.TitanExcavator and accent.machine == "Extractor" and accent.name ~= "Base" then
+			color, material = GOLD, Enum.Material.Metal
+		elseif passes.DragonFurnace and accent.machine == "Furnace" and accent.name ~= "Base" then
+			color, material = DRAGON, Enum.Material.Metal
+		elseif accent.machine == "Anvil" and accent.name == "Face" then
+			color = accent.color:Lerp(GOLD, math.clamp((gear.Hammer or 0) / 20, 0, 0.45))
+		end
+		accent.part.Color, accent.part.Material = color, material
 	end
 end
 
 local function onProfile(profile)
-	local plot = Common.myPlot()
-	local parts = { tostring(plot) }
-	for track in UPGRADES do
-		table.insert(parts, tostring(profile.levels and profile.levels[track] or 0))
-	end
-	local sig = table.concat(parts, ",")
-	if sig ~= lastLevelSig then
-		lastLevelSig = sig
-		ensureScanned()
-		applyLevels(profile)
-	end
+	ensureScanned()
+	for _, d in plotData do refreshVisual(d) end
 end
 
 local function step(dt)
@@ -242,18 +279,24 @@ local function step(dt)
 	for plot, d in plotData do
 		if (d.center - camPos).Magnitude > CULL then
 			setCubesVisible(d, false)
+			for _, list in d.orbs do
+				for _, orb in list do
+					if type(orb) == "table" then orb.part.Transparency = 1 end
+				end
+			end
 		else
 			local own = plot == myPlot and profile ~= nil
+			local visual = visualProfile(d)
 			local owned = own or (plot:GetAttribute("OwnerUserId") or 0) ~= 0
 			local rate = DEFAULT_RATE
-			if own and profile.rates and profile.rates.orePerSec then
-				rate = profile.rates.orePerSec
+			if visual and visual.rates and visual.rates.orePerSec then
+				rate = visual.rates.orePerSec
 			elseif not owned then
 				rate = 0.1
 			end
 			local speed = math.clamp(0.5 + math.sqrt(math.max(rate, 0)) * 1.1, 0.5, 7)
 			d.ang += dt * speed
-			local matColor = own and Common.materialColor(profile.selectedMaterial) or nil
+			local matColor = visual and Common.materialColor(visual.selectedMaterial) or nil
 
 			-- Extractor
 			if d.gear and d.gear.Parent then
