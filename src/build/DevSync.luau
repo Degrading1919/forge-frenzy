@@ -1,9 +1,9 @@
 -- Mirrors repo scripts into the open place. Usage (Studio command bar / MCP): require(game.ServerStorage.Build.DevSync)()
-return function()
+return function(url: string?)
 	local HttpService = game:GetService("HttpService")
 	local prev = HttpService.HttpEnabled
 	HttpService.HttpEnabled = true
-	local ok, raw = pcall(HttpService.GetAsync, HttpService, "http://127.0.0.1:34872/bundle")
+	local ok, raw = pcall(HttpService.GetAsync, HttpService, url or "http://127.0.0.1:34872/bundle")
 	HttpService.HttpEnabled = prev
 	assert(ok, raw)
 	local bundle = HttpService:JSONDecode(raw)

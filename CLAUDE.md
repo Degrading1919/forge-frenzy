@@ -1,6 +1,6 @@
 # Claude guidance — Forge Frenzy
 
-You are working on **Forge Frenzy**, a Roblox incremental blacksmithing simulator. This repository is currently the source of truth for design; **do not assume any gameplay code, Roblox place or asset exists** until inspected.
+You are working on **Forge Frenzy**, an existing playable Roblox incremental blacksmithing simulator. The consolidated implementation is on `studio-integration` (PR #5); `main` retains the original design documentation. Continue the existing architecture and functioning game rather than rebuilding it. Source is the durable implementation truth; inspect and back up live Studio content before replacing objects or reconciling scripts. Current status is **1.0 ready for the owner's full playtest, with purchases and publishing disabled**; read [playtest evidence](docs/19_PLAYTEST_EVIDENCE.md) for verified behavior and human checks.
 
 ## Project mission
 

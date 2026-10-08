@@ -27,9 +27,7 @@ def walk(fs_path, inst_path, out):
     init = next((e for e in entries if e.startswith("init.") and classify(e)[1]), None)
     if init:
         with open(os.path.join(fs_path, init), encoding="utf-8") as f:
-            out.append({"path": inst_path, "class": classify(init)[1], "source": f.read().replace("
-", "
-")})
+            out.append({"path": inst_path, "class": classify(init)[1], "source": f.read()})
     else:
         out.append({"path": inst_path, "class": "Folder"})
     for e in entries:
@@ -42,9 +40,7 @@ def walk(fs_path, inst_path, out):
             name, cls = classify(e)
             if cls:
                 with open(full, encoding="utf-8") as f:
-                    out.append({"path": inst_path + [name], "class": cls, "source": f.read().replace("
-", "
-")})
+                    out.append({"path": inst_path + [name], "class": cls, "source": f.read()})
 
 
 def bundle():
@@ -67,6 +63,30 @@ def bundle():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        # Local-only preservation endpoint; never accepts a caller-supplied file path.
+        if self.path != "/backup":
+            self.send_error(404)
+            return
+        size = int(self.headers.get("Content-Length", "0"))
+        if not 0 < size <= 20_000_000:
+            self.send_error(413)
+            return
+        payload = json.loads(self.rfile.read(size))
+        backup_dir = os.path.join(ROOT, ".local", "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        from datetime import datetime, timezone
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        filename = "studio-export-" + stamp + ".json"
+        with open(os.path.join(backup_dir, filename), "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        if payload.get("modelHex"):
+            with open(os.path.join(backup_dir, filename[:-5] + ".rbxm"), "wb") as f:
+                f.write(bytes.fromhex(payload["modelHex"]))
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(filename.encode("utf-8"))
+
     def do_GET(self):
         body = json.dumps(bundle()).encode("utf-8") if self.path.startswith("/bundle") else b"{}"
         self.send_response(200)
@@ -83,4 +103,6 @@ if __name__ == "__main__":
         b = bundle()
         print(len(b["items"]), "items", b["roots"])
         sys.exit(0)
+    if "--port" in sys.argv:
+        PORT = int(sys.argv[sys.argv.index("--port") + 1])
     HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

@@ -1,8 +1,11 @@
 # Forge Frenzy
 
-**Status: preproduction / documented design, not implemented.**  
+**Status: 1.0 build ready for the owner's full playtest. Purchases and publishing disabled.**
+
 **Last consolidated: October 7, 2026.**  
 **Project:** Roblox incremental blacksmithing game, separate from Adventurer's Rise.
+
+The existing implementation is on `studio-integration` ([PR #5](https://github.com/Degrading1919/forge-frenzy/pull/5)); `main` retains the original design documentation. The open Studio experience is synchronized: press Play for the free-player loop and use Shop test grants to exercise premium features without Robux. See [playtest evidence and guide](docs/19_PLAYTEST_EVIDENCE.md), [balance evidence](docs/20_BALANCE_PLAYTEST.md), and the [recoverable service-container model](artifacts/ForgeFrenzy-1.0-playtest.rbxm). Preserve this implementation and existing Studio content when continuing work.
 
 ## Pitch
 
@@ -30,6 +33,11 @@ Build a blacksmithing empire without turning the game into a sprawling RPG. Work
 | [Claude Desktop build mission](docs/14_CLAUDE_BUILD_MISSION.md) | Ready-to-paste autonomous orchestrator prompt |
 | [Tripo asset manifest](docs/15_TRIPO_ASSET_MANIFEST.md) | Every externally generated 3D asset: priority, reuse, triangle budget and Tripo prompt ([JSON](design/tripo-asset-manifest.json)) |
 | [Machine-readable v0 balance](design/balance-v0.json) | Prototype configurations and explicit material prices |
+| [Code layout and contracts](docs/16_CODE_LAYOUT_AND_CONTRACTS.md) | Source/Studio mapping and service interfaces |
+| [Core economy implementation](docs/17_CORE_ECONOMY_IMPLEMENTATION.md) | Economy and forging API notes from the initial implementation |
+| [Client snapshot](docs/18_CLIENT_SNAPSHOT.md) | Server-owned profile replication contract |
+| [Playtest evidence](docs/19_PLAYTEST_EVIDENCE.md) | Current implementation, Studio verification, rerun commands and remaining acceptance |
+| [Progression simulation](docs/20_BALANCE_PLAYTEST.md) | Free-player pacing through 32 tiers; model assumptions and human balance checks |
 
 Agents should read [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md).
 
