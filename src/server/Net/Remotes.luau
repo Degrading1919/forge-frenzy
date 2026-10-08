@@ -140,11 +140,9 @@ function Remotes.snapshot(player: Player): any?
 	for k, v in p.entitlements or {} do
 		entitlements[k] = v and true or false
 	end
-	if Monet and Products then
-		for key in Products do
-			if type(key) == "string" and key ~= "LIVE" and safe(Monet.owns, player, key) then
-				entitlements[key] = true
-			end
+	if Monet and Monet.ownedKeys then
+		for k in safe(Monet.ownedKeys, player) or {} do
+			entitlements[k] = true
 		end
 	end
 	return {
@@ -189,9 +187,10 @@ function Remotes.snapshot(player: Player): any?
 		productsLive = Products ~= nil and Products.LIVE == true,
 		paidRandomAllowed = Monet == nil or (safe(Monet.canOfferPaidRandom, player) ~= false),
 		evolutionEligible = Evo and (safe(function()
-			local st = Evo.status(player)
-			return st and st.eligible
+			local ok, st = Evo.status(player)
+			return ok and type(st) == "table" and st.eligible == true
 		end) or false) or false,
+		evolveCharges = p.evolveCharges or 0,
 	}
 end
 
@@ -339,6 +338,10 @@ handlers[A.Leaderboards] = function(_player)
 	if LB and LB.getTop then
 		for _, metric in { "lifetimeCoins", "weaponsForged", "evolutionRank", "highestWeaponValue" } do
 			local ok, top = pcall(LB.getTop, metric, 10)
+			if not ok or type(top) ~= "table" or #top == 0 then
+				-- Global boards are unavailable in Studio or still warming up: show this server's ranking.
+				ok, top = pcall(LB.getServerTop, metric, 10)
+			end
 			data[metric] = ok and top or {}
 		end
 	end

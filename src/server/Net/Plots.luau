@@ -43,7 +43,7 @@ local function spawnAtPlot(player: Player, character: Model)
 	if spawn then
 		task.defer(function()
 			if character.Parent then
-				character:PivotTo(spawn.CFrame * CFrame.new(0, 4, 0) * CFrame.Angles(0, math.rad(180), 0))
+				character:PivotTo(spawn.CFrame * CFrame.new(0, 4, 0))
 			end
 		end)
 	end

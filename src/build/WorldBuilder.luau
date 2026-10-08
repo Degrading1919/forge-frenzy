@@ -398,16 +398,16 @@ end
 local function buildEggStand(parent: Instance, eggId: string, title: string, color: Color3, cf: CFrame)
 	local m = model(parent, "Egg_" .. eggId)
 	m:SetAttribute("EggId", eggId)
-	local base = part(m, "Base", Vector3.new(6, 1.2, 6), cf * CFrame.new(0, 0.6, 0), C.stoneDark, Enum.Material.Marble)
+	local base = part(m, "Base", Vector3.new(4.2, 1.2, 4.2), cf * CFrame.new(0, 0.6, 0), C.stoneDark, Enum.Material.Marble)
 	m.PrimaryPart = base
-	cyl(m, "Plinth", 4.6, 2, cf * CFrame.new(0, 2.2, 0), C.stone, Enum.Material.Marble)
+	cyl(m, "Plinth", 3.4, 2, cf * CFrame.new(0, 2.2, 0), C.stone, Enum.Material.Marble)
 	local egg = part(m, "Egg", Vector3.new(3, 4, 3), cf * CFrame.new(0, 5.4, 0), color, Enum.Material.SmoothPlastic)
 	egg.Shape = Enum.PartType.Ball
 	local glow = make("Highlight", { FillTransparency = 0.8, OutlineColor = color, FillColor = color }, egg)
 	glow.Name = "Glow"
 	light(egg, color, 10, 1)
 	attach(base, "PromptPoint", Vector3.new(0, 3, 0))
-	local sign = part(m, "Sign", Vector3.new(5.4, 1.2, 0.3), cf * CFrame.new(0, 1.6, -3.2), C.woodDark, Enum.Material.Wood)
+	local sign = part(m, "Sign", Vector3.new(4.2, 1.1, 0.3), cf * CFrame.new(0, 1.6, -2.3), C.woodDark, Enum.Material.Wood)
 	label(sign, Enum.NormalId.Front, title, color)
 	return m
 end
@@ -457,22 +457,24 @@ local function buildHub(world: Instance)
 	-- Hatchery (east, +X)
 	local hatch = make("Folder", { Name = "Hatchery" }, hub)
 	local hatchCenter = CFrame.lookAt(Vector3.new(36, 0, 0), Vector3.new(0, 0, 0))
-	part(hatch, "Platform", Vector3.new(26, 1, 12), hatchCenter * CFrame.new(0, 1, -2), C.stoneDark, Enum.Material.Marble)
-	local arch = part(hatch, "ArchTop", Vector3.new(28, 2, 2), hatchCenter * CFrame.new(0, 14, -7), C.magic, Enum.Material.Neon, { Transparency = 0.2 })
+	part(hatch, "Platform", Vector3.new(32, 1, 12), hatchCenter * CFrame.new(0, 1, -2), C.stoneDark, Enum.Material.Marble)
+	local arch = part(hatch, "ArchTop", Vector3.new(34, 2, 2), hatchCenter * CFrame.new(0, 14, -7), C.magic, Enum.Material.Neon, { Transparency = 0.2 })
 	light(arch, C.magic, 25, 1)
-	for _, x in { -13, 13 } do
+	for _, x in { -16, 16 } do
 		part(hatch, "ArchPost", Vector3.new(2, 14, 2), hatchCenter * CFrame.new(x, 7, -7), C.stone, Enum.Material.Marble)
 	end
 	local hatchSign = part(hatch, "HatcherySign", Vector3.new(16, 2.6, 0.6), hatchCenter * CFrame.new(0, 11, -7), C.woodDark, Enum.Material.Wood)
 	label(hatchSign, Enum.NormalId.Front, "COMPANION HATCHERY", C.magic)
 	local eggs = {
-		{ "copper", "Copper Egg", Color3.fromRGB(200, 120, 70) },
-		{ "steel", "Steel Egg", Color3.fromRGB(170, 180, 196) },
-		{ "arcane", "Arcane Egg", Color3.fromRGB(90, 200, 170) },
-		{ "celestial", "Celestial Egg", Color3.fromRGB(255, 220, 120) },
+		{ "hearth", "Hearth Egg", Color3.fromRGB(200, 120, 70) },
+		{ "ember", "Ember Egg", Color3.fromRGB(255, 110, 40) },
+		{ "rune", "Rune Egg", Color3.fromRGB(80, 200, 210) },
+		{ "storm", "Storm Egg", Color3.fromRGB(110, 130, 255) },
+		{ "astral", "Astral Egg", Color3.fromRGB(150, 110, 255) },
+		{ "primordial", "Primordial Egg", Color3.fromRGB(255, 240, 200) },
 	}
 	for i, e in eggs do
-		buildEggStand(hatch, e[1], e[2], e[3], hatchCenter * CFrame.new(-9 + (i - 1) * 6, 1.5, -2))
+		buildEggStand(hatch, e[1], e[2], e[3], hatchCenter * CFrame.new(-11.5 + (i - 1) * 4.6, 1.5, -2))
 	end
 
 	-- Evolution altar (west, -X)
