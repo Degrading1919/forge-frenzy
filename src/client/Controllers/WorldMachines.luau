@@ -217,14 +217,14 @@ local function updateMine(now: number)
 			local lineIndex = model:GetAttribute("LineIndex")
 			if forgeIndex and p.stations and p.stations[forgeIndex] then
 				local key = "forge" .. forgeIndex
-				billboard(key, model:FindFirstChild("Base") or model.PrimaryPart, Vector2.new(250, 80), Vector3.new(0, 12, 0), 120)
+				billboard(key, model:FindFirstChild("Base") or model.PrimaryPart, Vector2.new(210, 66), Vector3.new(0, 12, 0), 120)
 				local text, color = forgeText(forgeIndex, p, now)
 				setBoard(key, text, color)
 			elseif lineIndex and p.lines and p.lines[lineIndex] then
 				local drill = model:FindFirstChild("Drill")
 				if drill then
 					local key = "line" .. lineIndex
-					billboard(key, drill:FindFirstChild("Base") or drill.PrimaryPart, Vector2.new(220, 60), Vector3.new(0, 17, 0), 120)
+					billboard(key, drill:FindFirstChild("Base") or drill.PrimaryPart, Vector2.new(170, 44), Vector3.new(0, 17, 0), 120)
 					local m = p.lines[lineIndex].m
 					setBoard(key, string.format("⛏️ %s  %s", Data.mat(m).name, Format.rate(math.min(p.rates.orePerSec, p.rates.ingotPerSec))), Theme.shade(Data.mat(m).color, -0.45))
 				end
@@ -242,7 +242,7 @@ local function updateMine(now: number)
 			if def then
 				local key = "pad" .. padId
 				seen[key] = true
-				billboard(key, pad, Vector2.new(230, 76), Vector3.new(0, 4, 0), 90)
+				billboard(key, pad, Vector2.new(170, 58), Vector3.new(0, 4, 0), 90)
 				local afford = (p.coins or 0) >= def.cost
 				setBoard(key, string.format("🏗️ %s\n%s", def.name, Theme.money(def.cost)), if afford then Theme.shade(C.green, -0.25) else C.panelDark)
 				pad.Transparency = 0.15 + 0.2 * (0.5 + 0.5 * math.sin(now * 3))
@@ -257,7 +257,7 @@ local function updateMine(now: number)
 	-- Collector.
 	local collector = plot:FindFirstChild("Collector")
 	if collector then
-		billboard("collector", collector, Vector2.new(220, 70), Vector3.new(0, 4.5, 0), 120)
+		billboard("collector", collector, Vector2.new(140, 50), Vector3.new(0, 5, 0), 120)
 		local bank = p.bank or 0
 		if (p.incomePerSec or 0) > 0 then
 			bank += 0 -- server value; the collector shows what is waiting
@@ -267,7 +267,7 @@ local function updateMine(now: number)
 	-- Lock button.
 	local lock = plot:FindFirstChild("LockButton")
 	if lock then
-		billboard("lock", lock, Vector2.new(200, 60), Vector3.new(0, 6, 0), 120)
+		billboard("lock", lock, Vector2.new(150, 44), Vector3.new(0, 7, 0), 120)
 		local lockedUntil = plot:GetAttribute("LockedUntil") or 0
 		local nextLock = plot:GetAttribute("NextLockAt") or 0
 		if lockedUntil > now then

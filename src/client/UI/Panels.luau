@@ -281,7 +281,10 @@ function Panels.create(name: string, title: string, opts: { [string]: any }?): (
 	-- Shrink the sheet to fit short screens (landscape phones).
 	local function resize()
 		local scale = Theme.scale()
-		local available = Theme.viewport() / scale
+		-- The layer excludes Roblox's top bar, so measure it rather than the raw viewport.
+		local layerSize = Panels.layer("Panels").AbsoluteSize
+		local screen = if layerSize.X > 0 then layerSize else Theme.viewport()
+		local available = screen / scale
 		holder.Size = UDim2.fromOffset(math.min(width, available.X - 24), math.min(height, available.Y - 40))
 	end
 	resize()

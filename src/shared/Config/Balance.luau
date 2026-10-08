@@ -172,8 +172,9 @@ Balance.production = {
 
 -- Displayed weapons earn passive cash into the workshop's cash collector.
 Balance.display = {
-	-- Fraction of a weapon's value earned per second while it is on a podium (1.2% / minute).
-	incomePerSecond = 0.0002,
+	-- Fraction of a weapon's value earned per second while it is on a podium (6% / minute), so a
+	-- weapon pays back its sale value in under 20 minutes on display: the steal-or-sell tension.
+	incomePerSecond = 0.001,
 	-- A displayed weapon never earns as if it were worth more than the best weapon the owner
 	-- could forge right now (current tier, biggest recipe, best roll), so a pile of old high-tier
 	-- trophies cannot trivialise the climb after an evolution.

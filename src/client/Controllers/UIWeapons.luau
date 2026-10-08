@@ -63,8 +63,9 @@ local function openDetail(w: any)
 	pack.dRarity.Text = string.upper(Theme.RarityNames[w.r] or "") .. (if w.sf then ("  ·  stolen from " .. w.sf) else "")
 	pack.dRarity.TextColor3 = color
 	pack.dValue.Text = Theme.money(w.v)
-	local perSec = w.v * 0.0002
-	pack.dIncome.Text = string.format("On display: +%s/sec", Theme.money(perSec))
+	local B = Kit.balance()
+	local perSec = w.v * (B and B.display.incomePerSecond or 0.001)
+	pack.dIncome.Text = "On display: " .. Theme.moneyRate(perSec)
 	Viewport.weapon(pack.detailCard, w, true, { Size = UDim2.fromOffset(220, 220), Position = UDim2.new(0.5, 0, 0, 64), AnchorPoint = Vector2.new(0.5, 0) }, pack.viewport)
 	local shown = isDisplayed(p, w.id)
 	Theme.setText(pack.dDisplay, if shown then "TAKE DOWN" else "DISPLAY")

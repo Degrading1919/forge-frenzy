@@ -160,7 +160,7 @@ tests["display income is a fraction of value and capped at the current tier's be
 	near(Economy.displayIncome(p, trophy), ForgeMath.maxValue(5) * Balance.display.incomePerSecond, 1e-6, "cap follows the unlocked tier")
 	near(Economy.displayIncome(p, trophy, 2), ForgeMath.maxValue(5, 2) * Balance.display.incomePerSecond, 1e-6, "cash multiplier raises the cap")
 	assert(Economy.displayIncome(p, small, 3) == 1000 * Balance.display.incomePerSecond, "income uses the stored value; the multiplier only lifts the cap")
-	assert(Balance.display.incomePerSecond == 0.0002 and Balance.display.bankCapSec == 3600)
+	assert(Balance.display.incomePerSecond > 0 and Balance.display.bankCapSec == 3600)
 end
 
 tests["only built podiums earn, and skipped (carried) weapons earn nothing"] = function()
@@ -170,10 +170,10 @@ tests["only built podiums earn, and skipped (carried) weapons earn nothing"] = f
 	p.weapons.b = weapon("b", 20000)
 	p.weapons.c = weapon("c", 40000)
 	p.showcase[1], p.showcase[2], p.showcase[3] = "a", "b", "c" -- slot 3 is not built (raw write)
-	near(Economy.displayIncomeTotal(p), (10000 + 20000) * 0.0002, 1e-9, "unbuilt podium earns nothing")
-	near(Economy.displayIncomeTotal(p, nil, { b = true }), 10000 * 0.0002, 1e-9, "carried weapon skipped")
+	near(Economy.displayIncomeTotal(p), (10000 + 20000) * Balance.display.incomePerSecond, 1e-9, "unbuilt podium earns nothing")
+	near(Economy.displayIncomeTotal(p, nil, { b = true }), 10000 * Balance.display.incomePerSecond, 1e-9, "carried weapon skipped")
 	p.pads.podiums_1 = true
-	near(Economy.displayIncomeTotal(p), (10000 + 20000 + 40000) * 0.0002, 1e-9, "built podium earns")
+	near(Economy.displayIncomeTotal(p), (10000 + 20000 + 40000) * Balance.display.incomePerSecond, 1e-9, "built podium earns")
 	assert(Economy.displayIncomeTotal(Economy.newProfile()) == 0)
 end
 
@@ -183,11 +183,11 @@ tests["the collector fills over time, caps at an hour and never loses cash"] = f
 	p.weapons.a = weapon("a", 100000)
 	assert(Economy.setShowcase(p, 1, "a"))
 	local perSec = Economy.displayIncomeTotal(p)
-	near(perSec, 20, 1e-9, "100k * 0.0002")
+	near(perSec, 100000 * Balance.display.incomePerSecond, 1e-9, "100k * rate")
 	local added = Economy.accrueDisplay(p, 10)
-	near(added, 200, 1e-9, "10 seconds")
-	near(p.bank, 200, 1e-9, "bank")
-	near(Economy.accrueDisplay(p, 10, nil, 0.5), 100, 1e-9, "offline efficiency halves it")
+	near(added, perSec * 10, 1e-9, "10 seconds")
+	near(p.bank, perSec * 10, 1e-9, "bank")
+	near(Economy.accrueDisplay(p, 10, nil, 0.5), perSec * 5, 1e-9, "offline efficiency halves it")
 	assert(Economy.accrueDisplay(p, -5) == 0 and Economy.accrueDisplay(p, 0 / 0) == 0 and Economy.accrueDisplay(p, 0) == 0)
 	-- days of idling stops at exactly one hour of income
 	Economy.accrueDisplay(p, 3 * 86400)

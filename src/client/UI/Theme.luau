@@ -91,12 +91,21 @@ function Theme.ts(n: number): number
 end
 
 local scaled: { UIScale } = {}
+local function scaleFor(sc: UIScale): number
+	local s = Theme.scale() * (sc:GetAttribute("Factor") or 1)
+	local fitW, fitH = sc:GetAttribute("FitW"), sc:GetAttribute("FitH")
+	if fitW and fitH then
+		-- Never let a big centered element run off a short or narrow screen (top bar ~60px).
+		local v = Theme.viewport()
+		s = math.min(s, (v.X - 20) / fitW, (v.Y - 70) / fitH)
+	end
+	return s
+end
 local function refreshScales()
-	local s = Theme.scale()
 	for i = #scaled, 1, -1 do
 		local sc = scaled[i]
 		if sc.Parent then
-			sc.Scale = s * (sc:GetAttribute("Factor") or 1)
+			sc.Scale = scaleFor(sc)
 		else
 			table.remove(scaled, i)
 		end
@@ -117,13 +126,18 @@ local function hookViewport()
 	end)
 end
 
--- Adds a UIScale that tracks the device scale. `factor` tweaks it per element.
-function Theme.autoScale(inst: Instance, factor: number?): UIScale
+-- Adds a UIScale that tracks the device scale. `factor` tweaks it per element; `fit` (design
+-- size) additionally shrinks it so the whole element always fits on screen.
+function Theme.autoScale(inst: Instance, factor: number?, fit: Vector2?): UIScale
 	hookViewport()
 	local sc = Instance.new("UIScale")
 	sc.Name = "AutoScale"
 	sc:SetAttribute("Factor", factor or 1)
-	sc.Scale = Theme.scale() * (factor or 1)
+	if fit then
+		sc:SetAttribute("FitW", fit.X)
+		sc:SetAttribute("FitH", fit.Y)
+	end
+	sc.Scale = scaleFor(sc)
 	sc.Parent = inst
 	table.insert(scaled, sc)
 	return sc
@@ -551,6 +565,19 @@ end
 
 function Theme.money(n: number?): string
 	return "$" .. Theme.abbr(n)
+end
+
+-- "+$12/sec", or "+$3/min" when the per-second amount would round to nothing.
+function Theme.moneyRate(perSec: number?): string
+	perSec = perSec or 0
+	if perSec >= 1 or perSec <= 0 then
+		return "+$" .. Theme.abbr(perSec) .. "/sec"
+	end
+	local perMin = perSec * 60
+	if perMin >= 10 then
+		return "+$" .. Theme.abbr(perMin) .. "/min"
+	end
+	return string.format("+$%.1f/min", perMin)
 end
 
 return Theme

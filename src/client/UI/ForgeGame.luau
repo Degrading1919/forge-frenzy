@@ -64,7 +64,7 @@ local function build()
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	Theme.autoScale(stage)
+	Theme.autoScale(stage, 1, Vector2.new(520, 620))
 	ui.root, ui.stage = root, stage
 	ui.recipe = Theme.text({ Text = "", Size = UDim2.new(1, 0, 0, 34), TextSize = 28, TextColor3 = C.yellow, Parent = stage })
 	ui.title = Theme.text({ Text = "HEAT UP", Position = UDim2.fromOffset(0, 34), Size = UDim2.new(1, 0, 0, 70), TextSize = 64, TextColor3 = C.orange, Parent = stage })

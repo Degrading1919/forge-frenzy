@@ -47,7 +47,7 @@ local function build()
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	Theme.autoScale(holder)
+	Theme.autoScale(holder, 1, Vector2.new(460, 560))
 	local pop = Instance.new("UIScale")
 	pop.Name = "Pop"
 	pop.Parent = holder

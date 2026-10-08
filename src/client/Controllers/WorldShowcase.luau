@@ -55,7 +55,8 @@ local function makeLabel(top, e)
 	gui.LightInfluence = 0
 	textLabel(gui, 0, 24, WeaponDisplay.displayName(e), Common.rarityColor(e.r), 20)
 	textLabel(gui, 24, 26, "$" .. Common.abbrev(e.v or 0), Color3.fromRGB(255, 220, 90), 24)
-	textLabel(gui, 50, 24, "+$" .. Common.abbrev(e.inc or 0) .. "/sec", Color3.fromRGB(100, 240, 110), 22)
+	local Theme = require(Common.Client.UI.Theme)
+	textLabel(gui, 50, 24, Theme.moneyRate(e.inc or 0), Color3.fromRGB(100, 240, 110), 22)
 	gui.Parent = top
 	return gui
 end

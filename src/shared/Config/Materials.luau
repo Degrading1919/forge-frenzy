@@ -41,7 +41,7 @@ local Curve = {
 	-- the previous material the unlock costs. weapons(k) = unlockScale * (k - 1)^unlockPower,
 	-- so early unlocks take seconds to minutes and late unlocks take tens of hours.
 	unlockScale = 12,
-	unlockPower = 3.64,
+	unlockPower = 3.66,
 	-- The first few unlocks are discounted (rampFloor at Bronze rising to full price at
 	-- rampUntilTier) so a new player's first session moves quickly.
 	rampFloor = 0.55,

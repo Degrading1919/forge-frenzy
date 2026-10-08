@@ -25,7 +25,7 @@ local shownCoins = 0
 local targetCoins = 0
 
 local function sideButton(parent: Instance, order: number, icon: string, text: string, color: Color3, onClick: () -> ()): TextButton
-	local b = Theme.button({ Text = "", Color = color, Size = UDim2.fromOffset(92, 92), LayoutOrder = order, Corner = 20, OnClick = onClick, Parent = parent })
+	local b = Theme.button({ Name = text, Text = "", Color = color, Size = UDim2.fromOffset(92, 92), LayoutOrder = order, Corner = 20, OnClick = onClick, Parent = parent })
 	Theme.text({ Text = icon, Size = UDim2.new(1, 0, 0, 52), Position = UDim2.fromOffset(0, 4), TextSize = 44, TextStroke = false, ZIndex = b.ZIndex + 2, Parent = b })
 	Theme.text({ Text = text, Size = UDim2.new(1, -4, 0, 26), Position = UDim2.new(0, 2, 1, -34), TextScaled = true, ZIndex = b.ZIndex + 2, Parent = b })
 	return b
@@ -111,7 +111,7 @@ local function onProfile(p)
 	end
 	lastCoins = targetCoins
 	local income = p.incomePerSec or 0
-	ui.income.Text = string.format("+%s/s  ·  bank %s", Theme.money(income), Theme.money(p.bank or 0))
+	ui.income.Text = string.format("%s  ·  bank %s", Theme.moneyRate(income), Theme.money(p.bank or 0))
 	ui.income.Visible = income > 0 or (p.bank or 0) > 0
 	local count = p.weaponCount or 0
 	ui.bagCount.Text = Theme.abbr(count)
@@ -125,6 +125,16 @@ end
 
 function M.start()
 	State.observe(onProfile)
+	-- Get out of the way of the minigame and reward reveals.
+	local Reveal = require(UI.Reveal)
+	task.spawn(function()
+		local layer = Panels.layer("Hud")
+		while true do
+			task.wait(0.1)
+			local hide = Panels.isOpen("ForgeGame") or Reveal.isOpen()
+			layer.Visible = not hide
+		end
+	end)
 	task.spawn(function()
 		while true do
 			task.wait(1 / 30)

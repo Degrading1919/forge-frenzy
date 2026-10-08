@@ -479,20 +479,21 @@ tests["display income ticks into the bank, auto-collects with a magnet, and offl
 		rawset(Players, "GetPlayers", function()
 			return { s.victim, s.thief }
 		end)
-		assert(math.abs(WorkshopService.incomePerSec(s.victim) - 20) < 1e-9)
+		local rate = 100000 * Balance.display.incomePerSecond
+		assert(math.abs(WorkshopService.incomePerSec(s.victim) - rate) < 1e-9)
 		WorkshopService.tickIncome(10)
-		assert(math.abs(data.bank - 200) < 1e-9, "10 s of income")
+		assert(math.abs(data.bank - rate * 10) < 1e-9, "10 s of income")
 		assert(s.profiles[s.thief].bank == 0, "an empty workshop earns nothing")
 		s.owned.CollectionMagnet = true
 		WorkshopService.tickIncome(5)
 		assert(data.bank == 0 or data.bank < 1, "magnet auto-collected")
-		assert(data.coins >= 300 - 1)
+		assert(data.coins >= rate * 15 - 1)
 		s.owned.CollectionMagnet = nil
 		local before = data.bank
 		WorkshopService.settleOffline(s.victim, 100)
-		assert(math.abs(data.bank - before - 1000) < 1e-9, "100 s offline at 50 percent efficiency")
+		assert(math.abs(data.bank - before - rate * 50) < 1e-6, "100 s offline at 50 percent efficiency")
 		WorkshopService.settleOffline(s.victim, -5)
-		assert(math.abs(data.bank - before - 1000) < 1e-9)
+		assert(math.abs(data.bank - before - rate * 50) < 1e-6)
 		assert(WorkshopService.incomePerSec({}) == 0, "unknown player earns nothing")
 	end)
 end

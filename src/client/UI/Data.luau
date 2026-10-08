@@ -85,7 +85,9 @@ end
 function Data.weaponName(w: any): string
 	if not w then return "Unknown" end
 	local parts = {}
-	table.insert(parts, Data.CraftNames[w.q] or "")
+	if w.q and w.q ~= 2 then -- "Standard" is noise in a name
+		table.insert(parts, Data.CraftNames[w.q] or "")
+	end
 	if w.t and w.t ~= "" then table.insert(parts, w.t) end
 	table.insert(parts, Data.mat(w.m).name)
 	table.insert(parts, Data.ClassNames[w.c] or "Weapon")

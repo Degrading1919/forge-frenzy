@@ -783,7 +783,7 @@ local function buildLighting()
 		end
 	end
 	make("Atmosphere", { Density = 0.25, Offset = 0.1, Color = rgb(200, 230, 255), Decay = rgb(140, 180, 255), Glare = 0.15, Haze = 0.6 }, Lighting)
-	make("BloomEffect", { Intensity = 0.8, Size = 24, Threshold = 1.4 }, Lighting)
+	make("BloomEffect", { Intensity = 0.35, Size = 20, Threshold = 2.2 }, Lighting)
 	make("ColorCorrectionEffect", { Saturation = 0.28, Contrast = 0.08, Brightness = 0.03, TintColor = rgb(255, 250, 245) }, Lighting)
 	make("SunRaysEffect", { Intensity = 0.05, Spread = 0.5 }, Lighting)
 end

@@ -204,7 +204,7 @@ function Kit.weaponCard(parent: Instance, w: any, order: number, onClick: (() ->
 	stroke.Parent = card
 	Theme.text({ Text = Kit.ClassIcons[w.c] or "⚔️", Size = UDim2.new(1, 0, 0, 52), Position = UDim2.fromOffset(0, 6), TextSize = 40, Parent = card })
 	Kit.ingotIcon(card, w.m, 26, { Position = UDim2.fromOffset(8, 8) })
-	Theme.text({ Text = Data.mat(w.m).name, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 58), TextSize = 18, Parent = card })
+	Theme.text({ Text = Data.mat(w.m).name .. " " .. (Data.ClassNames[w.c] or ""), Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 58), TextScaled = true, Parent = card })
 	Theme.text({ Text = Theme.money(w.v), Size = UDim2.new(1, -8, 0, 26), Position = UDim2.fromOffset(4, 80), TextSize = 22, TextColor3 = C.cash, Parent = card })
 	Theme.text({ Text = Kit.RarityShort[w.r] or "", Size = UDim2.new(1, -8, 0, 20), Position = UDim2.fromOffset(4, 106), TextSize = 17, TextColor3 = color, Parent = card })
 	if badge then
