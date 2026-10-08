@@ -1,5 +1,8 @@
 # Core forging and economy: implementation notes
 
+> **Historical record (pre-v2).** Superseded by the current documents listed in [docs/README.md](README.md). The v1 simulators and runners it mentions (`simulate-economy.luau`, `simulate-progression.luau`, `run-specs.luau`, `tools/sync.luau`) were removed during the October 2026 consolidation. They are still in git history before that cleanup. Current equivalents: `tools/lune/simulate-v2.luau`, `tools/lune/run-tests.luau` and `ServerStorage.Build.DevSync`.
+
+
 **Status: IMPLEMENTED as plain Luau, verified under Lune; not yet verified in Studio.** Balance numbers remain **PROPOSED** (docs/13, design/balance-v0.json). Built against [docs/16](16_CODE_LAYOUT_AND_CONTRACTS.md); this file records the API as shipped, where it goes beyond that contract, and how to test it.
 
 ## Files

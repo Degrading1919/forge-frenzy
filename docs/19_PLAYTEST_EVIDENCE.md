@@ -1,5 +1,8 @@
 # Forge Frenzy 1.0 playtest evidence
 
+> **Historical record (pre-v2).** Superseded by the current documents listed in [docs/README.md](README.md). The v1 simulators and runners it mentions (`simulate-economy.luau`, `simulate-progression.luau`, `run-specs.luau`, `tools/sync.luau`) were removed during the October 2026 consolidation. They are still in git history before that cleanup. Current equivalents: `tools/lune/simulate-v2.luau`, `tools/lune/run-tests.luau` and `ServerStorage.Build.DevSync`.
+
+
 **Status: 1.0 ready for the owner's full playtest; purchases and publishing disabled.**
 **Evidence checkpoint: October 7, 2026.** Integration branch: `studio-integration`, [PR #5](https://github.com/Degrading1919/forge-frenzy/pull/5). This records observed Studio results; older design/bootstrap status labels describe earlier checkpoints. Commercial launch remains unapproved.
 

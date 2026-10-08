@@ -1,5 +1,8 @@
 # Progression simulation evidence — 1.0 playtest candidate
 
+> **Historical record (pre-v2).** Superseded by the current documents listed in [docs/README.md](README.md). The v1 simulators and runners it mentions (`simulate-economy.luau`, `simulate-progression.luau`, `run-specs.luau`, `tools/sync.luau`) were removed during the October 2026 consolidation. They are still in git history before that cleanup. Current equivalents: `tools/lune/simulate-v2.luau`, `tools/lune/run-tests.luau` and `ServerStorage.Build.DevSync`.
+
+
 Recorded October 7, 2026. **Simulation evidence, not earned Studio progression or human playtest evidence.** Balance constants remain PROPOSED; this investigation changed no gameplay curves.
 
 ## Reproduce

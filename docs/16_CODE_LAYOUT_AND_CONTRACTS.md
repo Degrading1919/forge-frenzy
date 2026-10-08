@@ -16,7 +16,7 @@
 
 File conventions: `Foo.luau` = ModuleScript, `Foo.server.luau` = Script, `Foo.client.luau` = LocalScript. Use `--!strict` where practical. No external packages without recording license and version.
 
-Sync: `python tools/devsync.py` then run `tools/sync.luau` in Studio (Rojo can replace this later; layout is identical).
+Sync: run `python tools/devsync.py`, then `return require(game.ServerStorage.Build.DevSync)()` in Studio through the command bar or MCP. Rojo can replace this later; the layout is identical.
 
 ## Service shape
 
