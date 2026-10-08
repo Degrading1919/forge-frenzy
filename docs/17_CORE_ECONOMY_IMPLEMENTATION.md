@@ -30,14 +30,14 @@
 
 All functions return `(ok, resultOrErrorCode)` unless noted. Error codes: `NotLoaded, InvalidMode, NotOwned, Busy, InvalidMaterial, InvalidClass, NoMaterial, InventoryFull, MaterialLocked, MaxTier, NotEnoughCoins, InvalidTrack, MaxLevel, NothingPending, InvalidAction, InvalidRequest, NothingSold, UnknownWeapon, ShowcaseFull, NoSession`.
 
-- **ForgeService**: `start(player, classIndex, materialIndex, mode)` per contract; called with no player (Main's lifecycle `start()`) it is a no-op, and `ForgeService.begin` is the same function without the name clash. `strike(player, sessionId) -> (counted, validCount)`; `resolve(player, "sell"|"keep")`; `stopAuto(player)`; plus `sellWeapons(player, {ids})` (skips showcased/unknown/duplicate ids), `toggleShowcase(player, id)`, `odds(mode) -> OddsTable`, `session(player)`. Events: `completed (player, weapon, luck)`, `stopped (player, reason)` when an auto loop ends (`Stopped`, `NoMaterial`, `InventoryFull`, `NotOwned`, ...).
-- **ProductionService**: `selectMaterial`, `unlockNextMaterial`, `rates` per contract, plus `bonuses(player)`, `settleOffline(player)`, `tickPlayer(player, dt)`, event `materialUnlocked (player, index)`.
-- **UpgradeService**: `buy(player, track)`, `list(player) -> { {track, name, kind, level, maxLevel, cost?, look?} }`, event `upgraded (player, track, level)`.
-- **DataService**: `get`, `waitFor`, `markDirty`, `profileChanged` per contract, plus `update(player, fn)`, `profileLoaded`, and `registerDefaults({ field = default })` so other services add their profile fields without editing the template. Falls back to in-memory profiles if ProfileStore cannot load; ProfileStore itself uses its mock store in Studio without API access.
+- **ForgeService**: `start(player, classIndex, materialIndex, mode)` per contract; called with no player (Main's lifecycle `start()`) it is a no-op, and `ForgeService.begin` is the same function without the name clash. Session ids are strings (`"f12"`). `strike(player, sessionId) -> (counted, validCount)`; `resolve(player, "sell"|"keep")`; `stopAuto(player)`; plus `sellWeapons(player, {ids})` and `sellKept(player, id)` (skip showcased/unknown/duplicate ids), `setShowcase(player, slot, id?)`, `toggleShowcase(player, id)`, `timings(player)`, `odds(mode) -> OddsTable`, `session(player)`. Events: `completed (player, weapon, luck, auto, validStrikes)`, `phase (player, { sessionId, phase, reason? })` with phases heat, strike, quench, done, cancelled and stopped, and `stopped (player, reason)` when an auto loop ends (`Stopped`, `NoMaterial`, `InventoryFull`, `NotOwned`, ...). `profile.settings.autoSellBelow` (rarity index, 0 = off) sells lower-rarity results as soon as they are rolled.
+- **ProductionService**: `selectMaterial`, `unlockNextMaterial`, `rates` per contract, plus `unlockCost(player)`, `bonuses(player)`, `settleOffline(player)`, `tickPlayer(player, dt)`, event `materialUnlocked (player, index)`.
+- **UpgradeService**: `buy(player, track)`, `cost(player, track) -> number | false`, `list(player) -> { {track, name, kind, level, maxLevel, cost?, look?} }`, event `upgraded (player, track, level)`.
+- **DataService**: `get`, `waitFor`, `markDirty`, `profileChanged` per contract, plus `saveNow(player)`, `update(player, fn)`, `profileLoaded`, and `registerDefaults({ field = default })` so other services add their profile fields without editing the template. Falls back to in-memory profiles if ProfileStore cannot load; ProfileStore itself uses its mock store in Studio without API access.
 
 ## Profile fields owned here
 
-`schemaVersion, coins, lifetimeCoins, weaponsForged, weaponsSold, highestWeaponValue, selectedMaterial, unlockedTier, ore[32], ingots[32], progress {ore, smelt}, levels {track}, gear {track}, weapons {[id]=Weapon}, pending, showcase {id ≤ 6}, journal[32] (rarity bitmask per material), nextWeaponId, lastSeen`.
+`schemaVersion, coins, lifetimeCoins, weaponsForged, weaponsSold, highestWeaponValue, selectedMaterial, unlockedTier, ore[32], ingots[32], progress {ore, smelt}, levels {track}, gear {track}, weapons {[id]=Weapon}, pending, showcase [6] (weapon id per pedestal, "" when empty), journal[32] (rarity bitmask per material), nextWeaponId, lastSeen`.
 
 Per-material arrays are always dense length-32 arrays (DataStores reject sparse arrays); `Economy.reconcile` repairs them on every load. Weapon ids are `"w" .. nextWeaponId`, unique per player.
 
@@ -48,7 +48,7 @@ Per-material arrays are always dense length-32 arrays (DataStores reject sparse 
 Run from the repo root with [Lune](https://lune-org.github.io) 0.10:
 
 ```
-lune run tools/lune/run-tests.luau            # 40 specs + balance-v0.json sync check
+lune run tools/lune/run-tests.luau            # every src/server/Tests spec + balance-v0.json sync check
 lune run tools/lune/simulate-economy.luau 60  # pacing for 1.5x / 2.5x / 4x / 5x players
 ```
 

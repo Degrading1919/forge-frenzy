@@ -48,7 +48,8 @@ tests["manual forge counts only window strikes and rolls server luck"] = functio
 			clock.now = 1000 + 2 + i * 0.2
 			assert(ForgeService.strike(player, info.sessionId), "window strike rejected")
 		end
-		assert(not ForgeService.strike(player, info.sessionId + 1), "wrong session id accepted")
+		assert(not ForgeService.strike(player, info.sessionId .. "x"), "wrong session id accepted")
+		assert(type(info.sessionId) == "string", "session ids are strings for the Strike remote")
 		local luckSeen
 		local conn = ForgeService.completed.Event:Connect(function(_, _, luck)
 			luckSeen = luck
@@ -133,6 +134,33 @@ tests["production, unlocks and upgrades go through the services"] = function()
 		assert(ProductionService.rates(player).capacity == 40)
 		local list = UpgradeService.list(player)
 		assert(list and #list == 8, "8 tracks listed")
+	end)
+end
+
+tests["auto-sell setting sells low rarities on completion"] = function()
+	withForge(function(player)
+		local data = DataService.get(player)
+		data.settings = { autoSellBelow = 7 } -- sells every rarity
+		assert(ForgeService.start(player, 1, 1, "free"))
+		ForgeService._completeNow(player)
+		assert(data.pending == nil and data.coins > 0 and data.weaponsSold == 1, "not auto-sold")
+	end)
+end
+
+tests["glue helpers: timings, costs, sellKept, showcase slots"] = function()
+	withForge(function(player)
+		local data = DataService.get(player)
+		local t = ForgeService.timings(player)
+		assert(t and t.heatSec == 2 and t.windowSec == 6 and t.revealSec == 1.5)
+		assert(ProductionService.unlockCost(player) == 414)
+		assert(UpgradeService.cost(player, "ExtractorOutput") == 40)
+		assert(UpgradeService.cost(player, "Nope") == false)
+		data.weapons.k = { id = "k", m = 1, c = 1, q = 1, r = 1, d = "x", v = 25, ts = 0 }
+		assert(ForgeService.setShowcase(player, 2, "k") and data.showcase[2] == "k")
+		assert(not ForgeService.sellKept(player, "k"), "showcased weapon sold")
+		assert(ForgeService.setShowcase(player, 2, nil) and data.showcase[2] == "")
+		local ok, result = ForgeService.sellKept(player, "k")
+		assert(ok and result.coins == 25 and data.coins == 25)
 	end)
 end
 

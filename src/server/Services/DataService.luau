@@ -91,6 +91,16 @@ function DataService.markDirty(player: Player)
 	end
 end
 
+-- Saves the player's profile now (e.g. right after a purchase receipt). No-op for in-memory profiles.
+function DataService.saveNow(player: Player): boolean
+	local session = sessions[player]
+	if session and session.profile then
+		session.profile:Save()
+		return true
+	end
+	return false
+end
+
 -- Runs `mutate(data)` and marks the profile dirty if the player is loaded. Returns its results.
 function DataService.update(player: Player, mutate: (Economy.Profile) -> ...any): ...any
 	local data = DataService.get(player)

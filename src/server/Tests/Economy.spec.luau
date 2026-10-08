@@ -55,7 +55,8 @@ tests["reconcile repairs damaged profiles without touching foreign fields"] = fu
 	assert(p.unlockedTier == 32 and p.selectedMaterial == 32, "tier clamp")
 	assert(p.levels.ExtractorOutput == Balance.tracks.ExtractorOutput.maxLevel, "level clamp")
 	assert(p.levels.SmelterSpeed == 0, "missing level filled")
-	assert(#p.showcase == 1 and p.showcase[1] == "w1", "showcase cleaned")
+	assert(#p.showcase == Balance.inventory.showcaseSlots, "showcase has one entry per pedestal")
+	assert(p.showcase[1] == "w1" and p.showcase[2] == "" and p.showcase[3] == "", "showcase cleaned in place")
 	assert(p.pets.a == 1, "foreign field kept")
 	assert(p.gear.Hammer == 0, "gear filled")
 end
@@ -298,7 +299,12 @@ tests["showcase toggles and respects slot count"] = function()
 	end
 	local ok, err = Economy.toggleShowcase(p, "s" .. (Balance.inventory.showcaseSlots + 1))
 	assert(not ok and err == "ShowcaseFull")
-	assert(Economy.toggleShowcase(p, "s1") and #p.showcase == Balance.inventory.showcaseSlots - 1, "toggle off")
+	assert(Economy.toggleShowcase(p, "s1") and p.showcase[1] == "", "toggle off frees the slot")
+	assert(Economy.setShowcase(p, 1, "s" .. (Balance.inventory.showcaseSlots + 1)) and p.showcase[1] ~= "", "set slot")
+	assert(Economy.setShowcase(p, 6, "s2") and p.showcase[6] == "s2" and p.showcase[2] == "", "moving keeps one pedestal")
+	assert(Economy.setShowcase(p, 6, nil) and p.showcase[6] == "", "clear slot")
+	local badSlot, slotErr = Economy.setShowcase(p, 7, "s3")
+	assert(not badSlot and slotErr == "InvalidSlot")
 	ok, err = Economy.toggleShowcase(p, "nope")
 	assert(not ok and err == "UnknownWeapon")
 end
