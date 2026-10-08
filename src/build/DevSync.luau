@@ -34,11 +34,24 @@ return function()
 	end
 	for _, item in bundle.items do
 		local inst = resolve(item.path, item.class)
-		seen[inst] = true
 		if item.source and inst.Source ~= item.source then
-			inst.Source = item.source
+			if inst:IsA("ModuleScript") and inst.Name ~= "DevSync" then
+				-- Replace changed modules so edit-mode require() caches can't serve stale code.
+				local fresh = Instance.new("ModuleScript")
+				fresh.Name = inst.Name
+				fresh.Source = item.source
+				for _, c in inst:GetChildren() do
+					c.Parent = fresh
+				end
+				fresh.Parent = inst.Parent
+				inst:Destroy()
+				inst = fresh
+			else
+				inst.Source = item.source
+			end
 			updated += 1
 		end
+		seen[inst] = true
 	end
 	for _, rootPath in bundle.roots do
 		local root = resolve(rootPath, nil)

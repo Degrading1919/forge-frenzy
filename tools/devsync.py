@@ -27,7 +27,9 @@ def walk(fs_path, inst_path, out):
     init = next((e for e in entries if e.startswith("init.") and classify(e)[1]), None)
     if init:
         with open(os.path.join(fs_path, init), encoding="utf-8") as f:
-            out.append({"path": inst_path, "class": classify(init)[1], "source": f.read()})
+            out.append({"path": inst_path, "class": classify(init)[1], "source": f.read().replace("
+", "
+")})
     else:
         out.append({"path": inst_path, "class": "Folder"})
     for e in entries:
@@ -40,7 +42,9 @@ def walk(fs_path, inst_path, out):
             name, cls = classify(e)
             if cls:
                 with open(full, encoding="utf-8") as f:
-                    out.append({"path": inst_path + [name], "class": cls, "source": f.read()})
+                    out.append({"path": inst_path + [name], "class": cls, "source": f.read().replace("
+", "
+")})
 
 
 def bundle():

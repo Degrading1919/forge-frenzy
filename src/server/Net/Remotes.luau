@@ -199,6 +199,13 @@ end
 
 local MIN_INTERVAL = 0.08 -- per-action spam guard (seconds)
 
+local FRIENDLY = {
+	NotLoaded = "Your save is still loading", NoMaterial = "Not enough ingots of that material",
+	InventoryFull = "Inventory full: sell or display some weapons", Busy = "The forge is busy",
+	NotOwned = "You don't own that yet", NotEnoughCoins = "Not enough coins", MaxTier = "Already at the highest tier",
+	MaxLevel = "Already maxed", Locked = "That material isn't unlocked yet", NothingPending = "Nothing to collect",
+	InvalidMaterial = "Pick a material", InvalidClass = "Pick a weapon type",
+}
 local function call(serviceName: string, fnName: string, ...: any): (boolean, any)
 	local s = svc(serviceName)
 	if not s or type(s[fnName]) ~= "function" then
@@ -213,6 +220,9 @@ local function call(serviceName: string, fnName: string, ...: any): (boolean, an
 		return true, nil
 	end
 	if type(a) == "boolean" then
+		if a == false and type(b) == "string" and FRIENDLY[b] then
+			return false, FRIENDLY[b]
+		end
 		return a, b
 	end
 	return true, a
@@ -266,29 +276,13 @@ handlers[A.SellWeapon] = function(player, weaponId)
 	if type(weaponId) ~= "string" or #weaponId > 64 then
 		return false, "Invalid weapon"
 	end
-	return call("ForgeService", "sellWeapons", player, { weaponId })
+	return call("ForgeService", "sellKept", player, weaponId)
 end
 handlers[A.SetShowcase] = function(player, slot, weaponId)
 	if not isInt(slot, 1, 6) or (weaponId ~= nil and (type(weaponId) ~= "string" or #weaponId > 64)) then
 		return false, "Invalid showcase"
 	end
-	local Data = svc("DataService")
-	local p = Data and Data.get(player)
-	if not p then
-		return false, "Profile not loaded"
-	end
-	local shown = p.showcase or {}
-	if weaponId and weaponId ~= "" then
-		if table.find(shown, weaponId) then
-			return true, shown
-		end
-		return call("ForgeService", "toggleShowcase", player, weaponId)
-	end
-	local current = shown[slot]
-	if not current then
-		return true, shown
-	end
-	return call("ForgeService", "toggleShowcase", player, current)
+	return call("ForgeService", "setShowcase", player, slot, weaponId)
 end
 handlers[A.Hatch] = function(player, eggId, count)
 	if type(eggId) ~= "string" or #eggId > 32 or not (count == 1 or count == 3 or count == 5) then
@@ -401,12 +395,8 @@ local RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythi
 local CLASS_NAMES = { "Sword", "Greatsword", "Axe", "Dagger", "Hammer" }
 local lastAnnounce = 0
 
-local function onForgeCompleted(player: Player, weapon: any, luck: number)
-	local Forge = svc("ForgeService")
-	local session = Forge and safe(Forge.session, player)
-	local auto = session ~= nil and session.mode ~= "manual"
-	local strikes = session and session.strikes and session.strikes.valid or 0
-	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes, auto = auto })
+local function onForgeCompleted(player: Player, weapon: any, luck: number, auto: boolean?, strikes: number?)
+	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes or 0, auto = auto == true })
 	if auto then
 		-- Auto forging resolves on the server so the loop never stalls on a pending result:
 		-- keep rarities at or above the player's threshold (default Epic), sell the rest.
@@ -500,11 +490,15 @@ function Remotes.start()
 		Forge.stopped.Event:Connect(function(player: Player, reason: any)
 			Remotes.session(player).autoMode = "off"
 			dirty[player] = true
-			Remotes.push(player, Protocol.Push.ForgePhase, { phase = "stopped", reason = tostring(reason) })
 			local msg = ({ NoMaterial = "Auto forge paused: out of ingots", InventoryFull = "Auto forge paused: inventory full" })[tostring(reason)]
 			if msg then
 				Remotes.toast(player, msg, "info")
 			end
+		end)
+	end
+	if Forge and Forge.phase then
+		Forge.phase.Event:Connect(function(player: Player, info: any)
+			Remotes.push(player, Protocol.Push.ForgePhase, info)
 		end)
 	end
 	Players.PlayerRemoving:Connect(function(player)
