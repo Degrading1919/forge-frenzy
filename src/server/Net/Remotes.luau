@@ -126,15 +126,14 @@ function Remotes.snapshot(player: Player): any?
 		showcase[i] = (p.showcase and p.showcase[i]) or ""
 	end
 	local upgradeCosts = {}
-	for _, t in MACHINE_TRACKS do
-		upgradeCosts[t] = Upgrade and safe(Upgrade.cost, player, t) or false
-	end
-	for _, t in GEAR_TRACKS do
-		upgradeCosts[t] = Upgrade and safe(Upgrade.cost, player, t) or false
+	for _, info in (Upgrade and safe(Upgrade.list, player)) or {} do
+		upgradeCosts[info.track] = info.cost or false
 	end
 	local rates = Production and safe(Production.rates, player) or {}
-	local Forge = svc("ForgeService")
-	local timings = Forge and safe(Forge.timings, player) or {}
+	local Economy = require(Shared.Economy) :: any
+	local timings = safe(Economy.forgeTiming, p, "manual", Production and safe(Production.bonuses, player)) or {}
+	local Materials = config("Materials")
+	local nextMat = Materials and Materials[(p.unlockedTier or 1) + 1]
 	local s = Remotes.session(player)
 	local entitlements = {}
 	for k, v in p.entitlements or {} do
@@ -158,7 +157,7 @@ function Remotes.snapshot(player: Player): any?
 		gear = p.gear or {},
 		costs = {
 			upgrades = upgradeCosts,
-			unlockNext = Production and safe(Production.unlockCost, player) or false,
+			unlockNext = nextMat and nextMat.unlockCost or false,
 		},
 		weapons = weapons,
 		pending = p.pending,
@@ -232,7 +231,7 @@ handlers[A.ForgeStart] = function(player, classIndex, materialIndex, mode)
 	if mode ~= "manual" and mode ~= "free" and mode ~= "premium" then
 		return false, "Invalid mode"
 	end
-	local ok, res = call("ForgeService", "start", player, classIndex, materialIndex, mode)
+	local ok, res = call("ForgeService", "begin", player, classIndex, materialIndex, mode)
 	if ok then
 		Remotes.session(player).autoMode = mode == "manual" and "off" or mode
 	end
@@ -267,7 +266,7 @@ handlers[A.SellWeapon] = function(player, weaponId)
 	if type(weaponId) ~= "string" or #weaponId > 64 then
 		return false, "Invalid weapon"
 	end
-	return call("ForgeService", "sellKept", player, weaponId)
+	return call("ForgeService", "sellWeapons", player, { weaponId })
 end
 handlers[A.SetShowcase] = function(player, slot, weaponId)
 	if not isInt(slot, 1, 6) or (weaponId ~= nil and (type(weaponId) ~= "string" or #weaponId > 64)) then
@@ -278,23 +277,18 @@ handlers[A.SetShowcase] = function(player, slot, weaponId)
 	if not p then
 		return false, "Profile not loaded"
 	end
+	local shown = p.showcase or {}
 	if weaponId and weaponId ~= "" then
-		if not (p.weapons and p.weapons[weaponId]) then
-			return false, "You don't own that weapon"
+		if table.find(shown, weaponId) then
+			return true, shown
 		end
-		for i = 1, 6 do -- a weapon can only stand on one pedestal
-			if p.showcase and p.showcase[i] == weaponId then
-				p.showcase[i] = ""
-			end
-		end
+		return call("ForgeService", "toggleShowcase", player, weaponId)
 	end
-	p.showcase = p.showcase or {}
-	for i = 1, 6 do
-		p.showcase[i] = p.showcase[i] or ""
+	local current = shown[slot]
+	if not current then
+		return true, shown
 	end
-	p.showcase[slot] = weaponId or ""
-	Data.markDirty(player)
-	return true, nil
+	return call("ForgeService", "toggleShowcase", player, current)
 end
 handlers[A.Hatch] = function(player, eggId, count)
 	if type(eggId) ~= "string" or #eggId > 32 or not (count == 1 or count == 3 or count == 5) then
@@ -363,12 +357,12 @@ handlers[A.DevGrant] = function(player, key)
 	end
 	return call("MonetizationService", "grantDev", player, key)
 end
-local SETTINGS = { autoSellBelow = "number", music = "boolean", sfx = "boolean", vfx = "boolean" }
+local SETTINGS = { autoSellBelow = "number", autoKeepFrom = "number", music = "boolean", sfx = "boolean", vfx = "boolean" }
 handlers[A.SetSetting] = function(player, key, value)
 	if type(key) ~= "string" or SETTINGS[key] == nil or type(value) ~= SETTINGS[key] then
 		return false, "Invalid setting"
 	end
-	if key == "autoSellBelow" and not isInt(value, 0, 6) then
+	if (key == "autoSellBelow" or key == "autoKeepFrom") and not isInt(value, 0, 7) then
 		return false, "Invalid setting"
 	end
 	local Data = svc("DataService")
@@ -407,8 +401,24 @@ local RARITY_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythi
 local CLASS_NAMES = { "Sword", "Greatsword", "Axe", "Dagger", "Hammer" }
 local lastAnnounce = 0
 
-local function onForgeCompleted(player: Player, weapon: any, luck: number, auto: boolean?, strikes: number?)
-	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes or 0, auto = auto == true })
+local function onForgeCompleted(player: Player, weapon: any, luck: number)
+	local Forge = svc("ForgeService")
+	local session = Forge and safe(Forge.session, player)
+	local auto = session ~= nil and session.mode ~= "manual"
+	local strikes = session and session.strikes and session.strikes.valid or 0
+	Remotes.push(player, Protocol.Push.ForgeResult, { weapon = weapon, luck = luck, strikes = strikes, auto = auto })
+	if auto then
+		-- Auto forging resolves on the server so the loop never stalls on a pending result:
+		-- keep rarities at or above the player's threshold (default Epic), sell the rest.
+		local Data = svc("DataService")
+		local p = Data and Data.get(player)
+		local keepFrom = (p and p.settings and p.settings.autoKeepFrom) or 4
+		local action = (weapon.r or 1) >= keepFrom and "keep" or "sell"
+		local ok = call("ForgeService", "resolve", player, action)
+		if not ok and action == "keep" then
+			call("ForgeService", "resolve", player, "sell") -- inventory full: never stall the loop
+		end
+	end
 	Remotes.markDirty(player)
 	if weapon and (weapon.r or 0) >= 5 and os.clock() - lastAnnounce > 8 then
 		lastAnnounce = os.clock()
@@ -486,14 +496,14 @@ function Remotes.start()
 		local signal = ev.Event or ev
 		signal:Connect(onForgeCompleted)
 	end
-	if Forge and Forge.phase then
-		local ev: any = Forge.phase
-		local signal = ev.Event or ev
-		signal:Connect(function(player: Player, info: any)
-			Remotes.push(player, Protocol.Push.ForgePhase, info)
-			if info and (info.phase == "cancelled" or info.phase == "stopped") then
-				Remotes.session(player).autoMode = "off"
-				dirty[player] = true
+	if Forge and Forge.stopped then
+		Forge.stopped.Event:Connect(function(player: Player, reason: any)
+			Remotes.session(player).autoMode = "off"
+			dirty[player] = true
+			Remotes.push(player, Protocol.Push.ForgePhase, { phase = "stopped", reason = tostring(reason) })
+			local msg = ({ NoMaterial = "Auto forge paused: out of ingots", InventoryFull = "Auto forge paused: inventory full" })[tostring(reason)]
+			if msg then
+				Remotes.toast(player, msg, "info")
 			end
 		end)
 	end

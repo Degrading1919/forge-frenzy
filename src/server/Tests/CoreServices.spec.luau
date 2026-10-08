@@ -55,6 +55,7 @@ tests["manual forge counts only window strikes and rolls server luck"] = functio
 		end)
 		clock.now = 1000 + 2 + 6 + 0.35
 		ForgeService._completeNow(player)
+		task.wait() -- Studio's deferred signal mode runs handlers at the next resumption point
 		conn:Disconnect()
 		assert(math.abs(luckSeen - 2.5) < 1e-9, "luck " .. tostring(luckSeen))
 		local data = DataService.get(player)
@@ -109,6 +110,7 @@ tests["auto forge stops when ingots run out"] = function()
 			clock.now += 20
 			table.remove(queued, 1)()
 		end
+		task.wait() -- flush deferred signal handlers in Studio
 		conn:Disconnect()
 		local data = DataService.get(player)
 		assert(data.weaponsForged == Economy.STARTER_INGOTS, "forged " .. data.weaponsForged)
