@@ -108,8 +108,13 @@ tests["normal evolution resets exactly the declared fields"] = function()
 	local ok, rank = Logic.evolve(p, false, 1)
 	assert(ok and rank == 1, rank)
 
+	-- Reset values come from Shared.Economy.newProfile() once the core schema is present.
+	local shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+	local economy = shared:FindFirstChild("Economy")
+	local fresh = if economy then require(economy).newProfile() else nil
 	for _, entry in Evolution.Resets do
-		assert(deepEqual(p[entry.field], entry.value), "did not reset " .. entry.field)
+		local expected = if fresh and fresh[entry.field] ~= nil then fresh[entry.field] else entry.value
+		assert(deepEqual(p[entry.field], expected), "did not reset " .. entry.field)
 	end
 	local declared = {}
 	for _, entry in Evolution.Resets do
@@ -126,18 +131,16 @@ tests["normal evolution resets exactly the declared fields"] = function()
 end
 
 tests["reset tables are copies, not shared config tables"] = function()
+	local configBefore = copy(Evolution.Resets)
 	local a, b = profile(), profile()
 	play(a, 150, 0, 4)
 	play(b, 150, 0, 4)
 	Logic.evolve(a, false, 1)
 	Logic.evolve(b, false, 1)
 	a.ore[1] = 99
-	assert(b.ore[1] == nil, "profiles share a reset table")
-	for _, entry in Evolution.Resets do
-		if type(entry.value) == "table" then
-			assert(next(entry.value) == nil, "config reset value was mutated")
-		end
-	end
+	a.progress.ore = 5
+	assert(b.ore[1] ~= 99 and b.progress.ore == 0, "profiles share a reset table")
+	assert(deepEqual(configBefore, Evolution.Resets), "config reset value was mutated")
 end
 
 tests["evolving again immediately fails and leaves the profile untouched"] = function()

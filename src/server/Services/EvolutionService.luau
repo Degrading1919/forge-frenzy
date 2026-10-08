@@ -85,6 +85,23 @@ local function cumulativeCosts(): { number }
 	return out
 end
 
+-- Starting values come from the core schema (Shared.Economy.newProfile) when it exists, so a
+-- reset produces exactly what a new player has (dense ore/ingot arrays, starter ingots, track
+-- levels). Config.Evolution.Resets values are the fallback.
+local function freshProfile(): any
+	local shared = ReplicatedStorage:FindFirstChild("Shared")
+	local economy = shared and shared:FindFirstChild("Economy")
+	if economy == nil then
+		return nil
+	end
+	local ok, module = pcall(require, economy)
+	if not ok or type(module) ~= "table" or type(module.newProfile) ~= "function" then
+		return nil
+	end
+	local okProfile, profile = pcall(module.newProfile)
+	return if okProfile and type(profile) == "table" then profile else nil
+end
+
 function Logic.ensure(profile: any)
 	if type(profile.evolutionRank) ~= "number" then
 		profile.evolutionRank = 0
@@ -181,8 +198,10 @@ function Logic.evolve(profile: any, protected: boolean, now: number): (boolean, 
 		profile.evolveCharges -= 1
 	else
 		profile.highestTierEver = math.max(profile.highestTierEver, profile.unlockedTier or 1)
+		local fresh = freshProfile()
 		for _, entry in Evolution.Resets do
-			profile[entry.field] = deepCopy(entry.value)
+			local value = if fresh and fresh[entry.field] ~= nil then fresh[entry.field] else entry.value
+			profile[entry.field] = deepCopy(value)
 		end
 	end
 	profile.evolutionRank += 1
