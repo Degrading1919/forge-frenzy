@@ -1,6 +1,6 @@
 --!strict
 -- Network glue (Studio thread owns this). Creates ReplicatedStorage.Remotes, maps Protocol actions onto
--- the gameplay services, and replicates profile snapshots (docs/17_CLIENT_SNAPSHOT.md).
+-- the gameplay services, and replicates profile snapshots (docs/18_CLIENT_SNAPSHOT.md).
 -- This is the single adapter to adjust when service APIs change.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
