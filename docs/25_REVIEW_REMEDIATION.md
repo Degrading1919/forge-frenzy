@@ -145,7 +145,7 @@ Run: `lune run tools/lune/simulate-v2.luau <scenario> 900 <seed>`. Simulation ev
 
 Readout:
 
-- **Free baseline.** It moved from ~495 h to ~512 h, still about the 500 h target. The old simulated player already sold the trophies that a newer weapon pushed off its podiums after an evolution, at full value. The cap removes that small cash-out, so no curve parameters were changed.
+- **Free baseline.** It moved from ~495 h to ~512 h, still about the 500 h target. The old simulated player already sold the trophies that a newer weapon pushed off its podiums after an evolution, at full value. The cap removes that small cash-out, so no curve parameters were changed. A control run of the same simulated player with the cap switched off (`free-uncapped`) reaches the final metal in 498.9 h, so the cap accounts for about 13 h. The rest comes from the simulated player now choosing displays by actual income.
 - **Stealing.** Even an endgame steal every 2 minutes for 500 hours is now worth about 5% of the climb, where it used to skip 92% of it. Occasional stealing is within seed noise.
 - **Evolve-then-sell.** No longer a shortcut.
 
