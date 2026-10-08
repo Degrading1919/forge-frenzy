@@ -30,6 +30,16 @@ function UpgradeService.buy(player: Player, track: any): (boolean, any)
 	return ok, result
 end
 
+-- Coins for the next level of `track`, or false when maxed, unknown or not loaded.
+function UpgradeService.cost(player: Player, track: any): number | false
+	local data = DataService.get(player)
+	local level = if data and type(track) == "string" then Economy.trackLevel(data, track) else nil
+	if level == nil then
+		return false
+	end
+	return Balance.upgradeCost(track, level) or false
+end
+
 export type TrackInfo = { track: string, name: string, kind: string, level: number, maxLevel: number, cost: number?, look: string? }
 
 -- Shop listing: every track with its current level and next cost (nil when maxed).

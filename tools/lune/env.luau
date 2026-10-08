@@ -173,7 +173,17 @@ function Node.WaitForChild(self, name)
 	return Node.FindFirstChild(self, name) or error(`WaitForChild: {name} not found under {self.Name}`)
 end
 
-function Node.IsA(_, className)
+-- Fresh copy with its own require cache entry (specs Clone a module to get clean state).
+function Node.Clone(self)
+	local copy = newNode(rawget(self, "Name"), rawget(self, "Parent"), rawget(self, "_dir"), rawget(self, "_file"))
+	rawset(copy, "_children", rawget(self, "_children"))
+	return copy
+end
+
+function Node.IsA(self, className)
+	if className == "ModuleScript" then
+		return rawget(self, "_file") ~= nil
+	end
 	return className == "Instance"
 end
 

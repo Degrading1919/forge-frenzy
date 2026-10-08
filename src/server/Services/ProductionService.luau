@@ -17,6 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Economy = require(Shared:WaitForChild("Economy"))
 local Balance = require(Shared:WaitForChild("Config"):WaitForChild("Balance"))
+local Materials = require(Shared:WaitForChild("Config"):WaitForChild("Materials"))
 local DataService = require(script.Parent.DataService)
 
 local ProductionService = {}
@@ -106,6 +107,13 @@ function ProductionService.unlockNextMaterial(player: Player): (boolean, any)
 		ProductionService.materialUnlocked:Fire(player, result)
 	end
 	return ok, result
+end
+
+-- Coins needed for the next extractor tier, or false at the last tier.
+function ProductionService.unlockCost(player: Player): number | false
+	local data = DataService.get(player)
+	local nextMat = if data then Materials[data.unlockedTier + 1] else nil
+	return if nextMat then nextMat.unlockCost else false
 end
 
 -- Called by DataService right after a profile loads.

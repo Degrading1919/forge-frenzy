@@ -45,7 +45,7 @@ export type Profile = {
 	gear: { [string]: number },
 	weapons: { [string]: Weapon },
 	pending: Weapon?,
-	showcase: { string },
+	showcase: { string }, -- one entry per pedestal, "" when empty
 	journal: { number },
 	nextWeaponId: number,
 	lastSeen: number,
@@ -84,7 +84,7 @@ function Economy.newProfile(): Profile
 		gear = trackLevels(Balance.gearTracks),
 		weapons = {},
 		pending = nil,
-		showcase = {},
+		showcase = table.create(Balance.inventory.showcaseSlots, ""),
 		journal = zeros(Economy.MATERIAL_COUNT),
 		nextWeaponId = 1,
 		lastSeen = 0,
@@ -144,10 +144,12 @@ function Economy.reconcile(p: Profile): Profile
 	if type(p.showcase) ~= "table" then
 		p.showcase = {}
 	end
-	local showcase = {}
-	for _, id in p.showcase do
-		if type(id) == "string" and p.weapons[id] and not table.find(showcase, id) and #showcase < Balance.inventory.showcaseSlots then
-			table.insert(showcase, id)
+	-- Fixed pedestal slots; an id stays on its slot, unknown or repeated ids become "".
+	local showcase = table.create(Balance.inventory.showcaseSlots, "")
+	for slot = 1, Balance.inventory.showcaseSlots do
+		local id = p.showcase[slot]
+		if type(id) == "string" and p.weapons[id] and not table.find(showcase, id) then
+			showcase[slot] = id
 		end
 	end
 	p.showcase = showcase
@@ -490,20 +492,42 @@ function Economy.sellWeapons(p: Profile, ids: any): (boolean, any)
 	return true, { sold = sold, coins = coins }
 end
 
--- Adds a kept weapon to the next free showcase pedestal, or removes it if already shown.
+-- Places a kept weapon on pedestal `slot` (1..showcaseSlots), or clears it when id is nil/"".
+-- A weapon stands on at most one pedestal; placing it elsewhere moves it.
+function Economy.setShowcase(p: Profile, slot: any, id: any): (boolean, any)
+	if type(slot) ~= "number" or slot ~= math.floor(slot) or slot < 1 or slot > Balance.inventory.showcaseSlots then
+		return false, "InvalidSlot"
+	end
+	if id == nil or id == "" then
+		p.showcase[slot] = ""
+		return true, p.showcase
+	end
+	if type(id) ~= "string" or not p.weapons[id] then
+		return false, "UnknownWeapon"
+	end
+	local at = table.find(p.showcase, id)
+	if at then
+		p.showcase[at] = ""
+	end
+	p.showcase[slot] = id
+	return true, p.showcase
+end
+
+-- Puts a kept weapon on the first free pedestal, or takes it down if already shown.
 function Economy.toggleShowcase(p: Profile, id: any): (boolean, any)
 	if type(id) ~= "string" or not p.weapons[id] then
 		return false, "UnknownWeapon"
 	end
 	local at = table.find(p.showcase, id)
 	if at then
-		table.remove(p.showcase, at)
+		p.showcase[at] = ""
 		return true, p.showcase
 	end
-	if #p.showcase >= Balance.inventory.showcaseSlots then
+	local free = table.find(p.showcase, "")
+	if not free then
 		return false, "ShowcaseFull"
 	end
-	table.insert(p.showcase, id)
+	p.showcase[free] = id
 	return true, p.showcase
 end
 

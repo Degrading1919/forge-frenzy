@@ -12,6 +12,9 @@
 
 	Auto modes loop until stopAuto, the player leaves, ingots run out or inventory fills; each
 	new result auto-keeps the previous pending weapon, and `stopped` fires with the reason.
+
+	profile.settings.autoSellBelow (rarity index, 0 = off) sells any new result whose rarity is
+	below it as soon as it is rolled, in every mode.
 ]]
 
 local Players = game:GetService("Players")
@@ -26,8 +29,10 @@ local ProductionService = require(script.Parent.ProductionService)
 
 local ForgeService = {}
 
-ForgeService.completed = Instance.new("BindableEvent") -- (player, weapon, luck)
+ForgeService.completed = Instance.new("BindableEvent") -- (player, weapon, luck, auto, validStrikes)
 ForgeService.stopped = Instance.new("BindableEvent") -- (player, reason) when an auto loop ends
+-- (player, { sessionId, phase = "heat"|"strike"|"quench"|"done"|"cancelled"|"stopped", reason? })
+ForgeService.phase = Instance.new("BindableEvent")
 
 -- Overridable for tests.
 ForgeService.rng = Random.new()
@@ -39,7 +44,7 @@ end
 type Mode = "manual" | "free" | "premium"
 
 type Session = {
-	id: number,
+	id: string,
 	mode: Mode,
 	materialIndex: number,
 	classIndex: number,
@@ -71,7 +76,11 @@ local function isValidMode(mode: any): boolean
 	return mode == "manual" or mode == "free" or mode == "premium"
 end
 
-local complete: (Player, number) -> ()
+local complete: (Player, string) -> ()
+
+local function firePhase(player: Player, sessionId: string, phase: string, reason: string?)
+	ForgeService.phase:Fire(player, { sessionId = sessionId, phase = phase, reason = reason })
+end
 
 local function begin(player: Player, classIndex: any, materialIndex: any, mode: any): (boolean, any)
 	if not isValidMode(mode) then
@@ -100,7 +109,7 @@ local function begin(player: Player, classIndex: any, materialIndex: any, mode: 
 	local windowEnd = windowStart + timing.windowSec
 	local grace = if mode == "manual" then Balance.forge.manual.latencyGraceSec else 0
 	local session: Session = {
-		id = nextSessionId,
+		id = "f" .. nextSessionId,
 		mode = mode,
 		materialIndex = materialIndex,
 		classIndex = classIndex,
@@ -114,6 +123,12 @@ local function begin(player: Player, classIndex: any, materialIndex: any, mode: 
 	}
 	sessions[player] = session
 	local id = session.id
+	firePhase(player, id, "heat")
+	ForgeService.delay(timing.heatSec, function()
+		if sessions[player] == session and not session.done then
+			firePhase(player, id, "strike")
+		end
+	end)
 	ForgeService.delay(session.completeAt - now, function()
 		complete(player, id)
 	end)
@@ -155,10 +170,11 @@ local function stopWith(player: Player, session: Session, reason: string)
 	if session.auto then
 		session.auto = false
 		ForgeService.stopped:Fire(player, reason)
+		firePhase(player, session.id, "stopped", reason)
 	end
 end
 
-complete = function(player: Player, sessionId: number)
+complete = function(player: Player, sessionId: string)
 	local session = sessions[player]
 	if not session or session.id ~= sessionId or session.done then
 		return
@@ -177,11 +193,23 @@ complete = function(player: Player, sessionId: number)
 		else ForgeMath.autoLuck(session.mode) :: number
 	local ok, result = Economy.completeForge(data, session.materialIndex, session.classIndex, luck, ForgeService.rng, os.time())
 	if not ok then
+		firePhase(player, session.id, "cancelled", result)
 		stopWith(player, session, result)
 		return
 	end
+	local settings = data.settings
+	local sellBelow = if type(settings) == "table" then settings.autoSellBelow else nil
+	if type(sellBelow) == "number" and result.r < sellBelow then
+		Economy.resolvePending(data, "sell")
+	end
 	DataService.markDirty(player)
-	ForgeService.completed:Fire(player, result, luck)
+	firePhase(player, session.id, "quench")
+	ForgeService.completed:Fire(player, result, luck, session.mode ~= "manual", if session.strikes then session.strikes.valid else 0)
+	ForgeService.delay(session.timing.revealSec, function()
+		if sessions[player] == session then
+			firePhase(player, session.id, "done")
+		end
+	end)
 
 	if session.auto then
 		ForgeService.delay(session.timing.revealSec, function()
@@ -243,6 +271,33 @@ function ForgeService.sellWeapons(player: Player, ids: any): (boolean, any)
 		DataService.markDirty(player)
 	end
 	return ok, result
+end
+
+-- Sells one kept weapon (the SellWeapon remote). Same rules as sellWeapons.
+function ForgeService.sellKept(player: Player, id: any): (boolean, any)
+	return ForgeService.sellWeapons(player, { id })
+end
+
+-- Places a kept weapon on pedestal `slot`, or clears the slot when id is nil or "".
+function ForgeService.setShowcase(player: Player, slot: any, id: any): (boolean, any)
+	local data = DataService.get(player)
+	if not data then
+		return false, "NotLoaded"
+	end
+	local ok, result = Economy.setShowcase(data, slot, id)
+	if ok then
+		DataService.markDirty(player)
+	end
+	return ok, result
+end
+
+-- Phase lengths the player's next manual forge would use (for UI before starting).
+function ForgeService.timings(player: Player): Economy.Timing?
+	local data = DataService.get(player)
+	if not data then
+		return nil
+	end
+	return Economy.forgeTiming(data, "manual", ProductionService.bonuses(player))
 end
 
 -- Puts a kept weapon on (or takes it off) a workshop showcase pedestal.
