@@ -28,13 +28,15 @@ end
 Evolution.ProductionPerRank = 0.15
 Evolution.PrepPerRank = 0.03
 
--- Profile fields a normal evolution resets (owned by the core economy thread) and the value
--- each returns to. Tables are deep-copied on reset. The preview and the reset both read this
+-- Profile fields a normal evolution resets (owned by the core economy thread). The value each
+-- returns to comes from Shared.Economy.newProfile() when present; `value` is the fallback.
+-- Tables are deep-copied on reset. The preview and the reset both read this
 -- list, so what the player is shown is exactly what happens.
 Evolution.Resets = {
 	{ field = "coins", label = "Coins", value = 0 },
 	{ field = "ore", label = "Raw ore", value = {} },
 	{ field = "ingots", label = "Ingots", value = {} },
+	{ field = "progress", label = "Partly mined ore and partly smelted ingots", value = { ore = 0, smelt = 0 } },
 	{ field = "unlockedTier", label = "Extractor tier (materials stay in your catalog)", value = 1 },
 	{ field = "levels", label = "Machine upgrade levels", value = {} },
 	{ field = "selectedMaterial", label = "Selected material (back to Copper)", value = 1 },
