@@ -57,7 +57,7 @@ end
 
 -- Combined workshop bonuses for a player (fractions, capped per family when applied).
 function ProductionService.bonuses(player: Player): Economy.Bonuses
-	local sources: { { [string]: number }? } = {}
+	local sources: { any } = {}
 	table.insert(sources, safeCall(service("CompanionService"), "bonuses", player))
 	local evolution = safeCall(service("EvolutionService"), "bonuses", player)
 	if type(evolution) == "table" then

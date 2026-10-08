@@ -219,9 +219,9 @@ function ForgeMath.rollWeapon(rng: Rng, materialIndex: number, classIndex: numbe
 	local quality = pick(rng, ForgeMath.craftsmanshipChances())
 	local trait: string? = nil
 	if rng:NextNumber() < ForgeMath.traitChance(rarity) then
-		trait = pickFrom(rng, forge.trait.names)
+		trait = pickFrom(rng, forge.trait.names) :: string
 	end
-	local design = pickFrom(rng, ForgeMath.designsFor(classIndex, rarity))
+	local design: string = pickFrom(rng, ForgeMath.designsFor(classIndex, rarity))
 	local payout = forge.payout
 	local jitter = payout.jitterMin + rng:NextNumber() * (payout.jitterMax - payout.jitterMin)
 	return {

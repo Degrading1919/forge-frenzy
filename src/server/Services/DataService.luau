@@ -107,8 +107,9 @@ local function finishLoad(player: Player, session: Session)
 	sessions[player] = session
 	-- Offline production is settled by ProductionService (required lazily to avoid a cycle).
 	local okProd, ProductionService = pcall(require, script.Parent:FindFirstChild("ProductionService"))
-	if okProd and ProductionService and ProductionService.settleOffline then
-		ProductionService.settleOffline(player)
+	local production: any = if okProd then ProductionService else nil
+	if production and production.settleOffline then
+		production.settleOffline(player)
 	else
 		session.data.lastSeen = os.time()
 	end

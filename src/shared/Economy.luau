@@ -172,12 +172,14 @@ local function spend(p: Profile, cost: number): boolean
 	return true
 end
 
+local BONUS_FAMILIES = { "extract", "smelt", "prep", "storage" }
+
 -- Sums bonus sources ({ extract = 0.1 }, ...) into one Bonuses table. Missing fields count 0.
 function Economy.combineBonuses(sources: { { [string]: number }? }): Bonuses
-	local total: Bonuses = { extract = 0, smelt = 0, prep = 0, storage = 0 }
+	local total: { [string]: number } = { extract = 0, smelt = 0, prep = 0, storage = 0 }
 	for _, source in sources do
 		if type(source) == "table" then
-			for family in total do
+			for _, family in BONUS_FAMILIES do
 				local value = source[family]
 				if type(value) == "number" and value == value then
 					total[family] += value
@@ -185,7 +187,7 @@ function Economy.combineBonuses(sources: { { [string]: number }? }): Bonuses
 			end
 		end
 	end
-	return total
+	return (total :: any) :: Bonuses
 end
 
 -- 1 + bonus, capped at the family multiplier cap and never below 1.
