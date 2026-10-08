@@ -12,7 +12,7 @@ return function(forceMock: boolean?)
 	while library.DataStoreState == "NotReady" and os.clock() - started < 20 do task.wait(0.05) end
 	assert(library.DataStoreState ~= "NotReady", "API detection timed out")
 	local mock = forceMock == true or library.DataStoreState ~= "Access"
-	local name = "ForgeFrenzy_IsolatedAcceptance_v1"
+	local name = "ForgeFrenzy_IsolatedAcceptance_v2"
 	local store = library.New(name, Economy.newProfile())
 	if mock then store = store.Mock end
 	local key = "Acceptance_" .. HttpService:GenerateGUID(false)
@@ -31,7 +31,14 @@ return function(forceMock: boolean?)
 	data.selectedMaterial, data.unlockedTier = 2, 2
 	data.ingots[2] = 17
 	data.weapons = {["acceptance-weapon"] = ForgeMath.rollWeapon(Random.new(177), 1, 1, 1.5, {id = "acceptance-weapon", ts = os.time()})}
-	data.pets = {["acceptance-pet"] = {id = "acceptance-pet", k = "ember_sprite", ts = os.time()}}
+	-- v2 workshop state: pads, ore lines, forge recipes with auto, displays, collector cash.
+	data.pads = {podiums_1 = true, forge_2 = true}
+	Economy.reconcile(data)
+	data.lines[1].m = 2
+	data.stations[2] = {m = 2, c = 5, keep = 3, auto = "free"}
+	data.showcase[3] = "acceptance-weapon"
+	data.bank = 321
+	data.pets = {["acceptance-pet"] = {id = "acceptance-pet", k = "ember_sprite", ts = os.time(), lv = 3}}
 	data.equipped = {"acceptance-pet"}
 	data.entitlements = {VIPWorkshop = true}
 	data.evolutionRank = 3
@@ -54,6 +61,9 @@ return function(forceMock: boolean?)
 		assert(saved.weapons["acceptance-weapon"].id == "acceptance-weapon" and saved.pets["acceptance-pet"].id == "acceptance-pet", "Collection lost")
 		assert(saved.equipped[1] == "acceptance-pet" and saved.entitlements.VIPWorkshop and saved.evolutionRank == 3, "Permanent progress lost")
 		assert(saved.receipts.acceptance_receipt and saved.acceptanceFinal, "Transaction/release state lost")
+		assert(saved.pads.podiums_1 and saved.pads.forge_2 and #saved.stations == 2 and saved.lines[1].m == 2, "Workshop build-out lost")
+		assert(saved.stations[2].c == 5 and saved.stations[2].keep == 3 and saved.stations[2].auto == "free", "Forge recipe/auto lost")
+		assert(saved.showcase[3] == "acceptance-weapon" and saved.bank == 321 and saved.pets["acceptance-pet"].lv == 3, "Displays, collector or pet level lost")
 	end)
 	second:EndSession()
 	assert(ok, err)

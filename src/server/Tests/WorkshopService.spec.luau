@@ -171,6 +171,11 @@ end
 
 -- Runs fn with two fake workshops: thief owns plot 2 (x = 100), victim plot 1 (x = 0).
 local function runtime(fn: (any) -> ())
+	if typeof(Players) == "Instance" then
+		-- These drive fake players through a patched Players service, which only the Lune
+		-- harness allows. In Studio the real two-client acceptance covers the same flows.
+		return
+	end
 	local savedWorld = table.clone(WorkshopService.world)
 	local savedPlayers = rawget(Players, "GetPlayers")
 	local state: any = { now = 1000, saved = 0, notes = {}, owned = {} }

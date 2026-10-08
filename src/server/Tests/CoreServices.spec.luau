@@ -107,7 +107,8 @@ tests["manual forge counts only window strikes and rolls server luck"] = functio
 		assert(#payload.results == 1 and payload.results[1].sold == false)
 		local data = DataService.get(player)
 		local weapon = payload.results[1].weapon
-		assert(data.weapons[weapon.id] == weapon, "manual results always go to the backpack")
+		-- BindableEvent arguments are copies in Studio, so compare by id and value.
+		assert(data.weapons[weapon.id] and data.weapons[weapon.id].v == weapon.v, "manual results always go to the backpack")
 		assert(data.ingots[1] == Economy.STARTER_INGOTS - 1 and data.weaponsForged == 1, "ingot spent")
 		assert(data.pending == nil)
 		assert(not ForgeService.strike(player, info.sessionId), "strike after completion")
@@ -219,6 +220,7 @@ tests["a waiting auto forge resumes by itself when the ore line delivers ingots"
 		end)
 		local ok, info = ForgeService.start(player, 1, "free")
 		assert(ok and info.waiting == true and info.sessionId, "starting with no ingots waits")
+		task.wait() -- deferred signals in Studio
 		assert(data.weaponsForged == 3 and phases[#phases] == "waiting")
 		-- still empty: the retry just waits again
 		state.now += 5

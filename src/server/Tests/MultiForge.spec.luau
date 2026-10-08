@@ -68,14 +68,16 @@ tests["MultiForge rolls independently and counts every forge"] = function()
 		Forge._completeNow(player, 1)
 		task.wait()
 		connection:Disconnect()
-		assert(event and #event.results == 2 and event.luck == 1.5 and event.auto and event.station == 1)
+		assert(event, "completed event")
+		assert(#event.results == 2, "two results")
+		assert(event.luck == 1.5 and event.auto and event.station == 1, "event fields")
 		local weapons = onlyWeapons(p)
 		assert(#weapons == 2 and p.pending == nil, "both rolls land in the backpack")
 		assert(p.ingots[1] == 8 and p.weaponsForged == Balance.forge.autoUnlockAfterForges + 2, "one charge/counter increment per roll")
 		for i = 1, 2 do
 			local got, want = event.results[i].weapon, batch.results[i].weapon
 			assert(got.v == want.v and got.r == want.r and got.q == want.q and got.d == want.d, "roll " .. i .. " must consume independent RNG draws")
-			assert(p.weapons[got.id] == got)
+			assert(p.weapons[got.id] and p.weapons[got.id].v == got.v)
 		end
 		assert(event.results[1].weapon.id ~= event.results[2].weapon.id)
 		assert(Evolution.Logic.progress(p).forged - progressBefore == 2, "extra rolls must count toward evolution")
