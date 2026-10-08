@@ -631,24 +631,20 @@ function Economy.completeForgeBatch(p: Profile, materialIndex: number, classInde
 end
 
 --[[
-	What a weapon is worth to the player holding it right now (selling and display income).
+	What a weapon sells for to the player holding it right now.
 
-	A weapon in a metal the player has unlocked, that they forged themselves, is worth its full
-	value. Two kinds of weapon are worth only what the same weapon (type, rarity, craftsmanship,
-	trait) would be in the best metal the player has now, at the player's own evolution bonus:
-	  * a weapon above the player's current metals: an old trophy kept through an evolution, or a
-	    weapon stolen from a more advanced player;
-	  * any stolen weapon (`st`), so another player's evolution bonus never transfers.
-	The weapon keeps its identity and its full value on its card, and that value comes back as
-	the player reaches its metal again. This stops cashing out high-tier weapons (stolen, or kept
-	through evolution) from skipping hundreds of hours of the climb, while stealing a great weapon
-	still pays well. (Display income has its own, older cap: see displayIncome.)
+	Stolen weapons (`st`) always keep their full value: the owner wants stealing a great weapon to
+	pay off in full. A weapon the player forged in a metal above their current one (a trophy kept
+	through an evolution) sells only for what the same weapon (type, rarity, craftsmanship, trait)
+	would be in their best metal now, at their own evolution bonus; its card keeps the full value
+	and it sells for that again once they reach its metal. This stops "evolve, then sell every old
+	trophy" from skipping a large part of the climb. Display income has its own cap (displayIncome).
 ]]
 function Economy.usableValue(p: Profile, weapon: Weapon, mult: number?): number
 	local value = weapon.v
 	local unlocked = p.unlockedTier or 1
-	if weapon.st or (weapon.m or 1) > unlocked then
-		local tier = math.clamp(math.min(weapon.m or 1, unlocked), 1, Economy.MATERIAL_COUNT)
+	if not weapon.st and (weapon.m or 1) > unlocked then
+		local tier = math.clamp(unlocked, 1, Economy.MATERIAL_COUNT)
 		local rarity = math.clamp(tonumber(weapon.r) or 1, 1, 6)
 		local quality = math.clamp(tonumber(weapon.q) or 1, 1, #Balance.forge.craftsmanship.valueBandOffsets)
 		local class = if ForgeMath.isValidClass(weapon.c) then weapon.c else 1
@@ -750,8 +746,7 @@ end
 
 -- What one displayed weapon earns per second (see Balance.display).
 function Economy.displayIncome(p: Profile, weapon: Weapon, mult: number?): number
-	-- A stolen weapon earns on its usable value; any weapon is then capped at the current tier.
-	local value = if weapon.st then Economy.usableValue(p, weapon, mult) else weapon.v
+	local value = weapon.v
 	if Balance.display.capToCurrentTier then
 		value = math.min(value, ForgeMath.maxValue(p.unlockedTier, mult))
 	end

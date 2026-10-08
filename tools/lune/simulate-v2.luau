@@ -12,9 +12,9 @@
 	Stealing stress tests (free auto plus a steal on a fixed schedule; worst case: every steal
 	lands a top-roll Mythic Primordium greatsword from a rank-13 player, the best weapon in the
 	game, which is then displayed or sold for whatever it is worth to the thief):
-	  steal2m          one such steal every 2 minutes, for the whole run (with the value cap)
-	  steal15m         one every 15 minutes (with the value cap)
-	  steal2m-uncapped every 2 minutes, with weapons selling at full value (before this fix)
+	  steal2m          one such steal every 2 minutes, for the whole run (stolen weapons sell in full)
+	  steal15m         one every 15 minutes (stolen weapons sell in full)
+	  steal2m-uncapped every 2 minutes, with every weapon selling at full value (no trophy cap)
 	  evolve-sell      free auto, but after each evolution sells every kept weapon at once
 	  evolve-sell-uncapped  the same, with weapons selling at full value (before this fix)
 	  free-uncapped    plain free auto with weapons selling at full value (before this fix)

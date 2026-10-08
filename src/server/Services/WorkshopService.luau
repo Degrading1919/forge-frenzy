@@ -256,7 +256,7 @@ function Logic.receive(thiefProfile: any, transferId: string, entry: any, now: n
 	local copy = table.clone(entry.w)
 	copy.id = Economy.nextWeaponId(thiefProfile)
 	copy.sf = entry.fromName or copy.sf -- "stolen from", shown on the weapon card
-	copy.st = 1 -- stolen: its usable value follows the holder's progression (Economy.usableValue)
+	copy.st = 1 -- stolen: always sells for its full value (Economy.usableValue)
 	thiefProfile.weapons[copy.id] = copy
 	thiefProfile.weaponsStolen = (thiefProfile.weaponsStolen or 0) + 1
 	thiefProfile.xferIn[transferId] = now

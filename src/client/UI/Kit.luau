@@ -38,7 +38,7 @@ function Kit.economy(): any?
 	return if ok then Economy else nil
 end
 
--- What weapon `w` sells for right now (a stolen weapon is capped by your progression).
+-- What weapon `w` sells for right now (old trophies above your current metal sell like your best metal).
 function Kit.usableValue(p: any, w: any): number
 	local Economy = Kit.economy()
 	if not Economy or not p then return w.v end

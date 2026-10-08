@@ -247,7 +247,7 @@ local passed, err = pcall(function()
 	assert(Economy.setShowcase(pb, 1, ""))
 	table.insert(evidence, "Swapping the displayed weapon mid-hold cancels the steal (" .. tostring(swapWhy) .. ")")
 
-	-- Cross-tier cash-out: a stolen endgame weapon pays like the thief's best metal.
+	-- A stolen endgame weapon keeps its full value at the booth.
 	local bigId = Economy.nextWeaponId(pa)
 	local big = ForgeMath.rollWeapon(rng, 20, 2, 5, { id = bigId, ts = os.time(), mult = 7 })
 	big.st, big.sf = 1, "Someone"
@@ -255,10 +255,9 @@ local passed, err = pcall(function()
 	teleport(a, CFrame.new(0, 2, 15))
 	local coinsBefore = pa.coins
 	local okBig, soldBig = Remotes.handlers.SellWeapons(a, { bigId })
-	local expected = Economy.usableValue(pa, big, Forge.cashMultiplier(a))
-	assert(okBig and soldBig.coins == expected and soldBig.coins < big.v / 1000, "Endgame stolen weapon sold for its full value")
+	assert(okBig and soldBig.coins == big.v, "Stolen weapon did not sell for its full value")
 	assert(pa.coins - coinsBefore == soldBig.coins)
-	table.insert(evidence, string.format("Stolen tier-20 weapon worth $%s sold for $%s by a tier-3 thief", ForgeMath.formatCoins(big.v), ForgeMath.formatCoins(soldBig.coins)))
+	table.insert(evidence, string.format("Stolen tier-20 weapon sold for its full $%s by a tier-3 thief", ForgeMath.formatCoins(soldBig.coins)))
 
 	-- Tag back: the owner touching the thief returns the weapon.
 	local second = giveWeapon(pb, 3000)

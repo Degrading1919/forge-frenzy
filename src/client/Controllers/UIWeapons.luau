@@ -66,7 +66,7 @@ local function openDetail(w: any)
 	pack.dValue.Text = Theme.money(w.v)
 	local income = "On display: " .. Theme.moneyRate(Kit.displayIncome(p, w))
 	if usable < w.v then
-		-- A stolen weapon above your metals: it keeps its value, but pays like your best metal.
+		-- A trophy above your current metal (kept through evolution) sells like your best metal.
 		income = string.format("Sells for %s until you unlock %s · %s", Theme.money(usable), Data.mat(w.m).name, income)
 	end
 	pack.dIncome.Text = income

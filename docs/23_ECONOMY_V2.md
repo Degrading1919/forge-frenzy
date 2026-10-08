@@ -57,7 +57,7 @@ These are multiplied by up to x7 at evolution rank 13, so a perfect Primordium G
 
 ## Results (900 h cap)
 
-> **Updated by [docs/25](25_REVIEW_REMEDIATION.md):** after the usable-value cap (weapons above your current metals, and stolen weapons, sell like your best metal) the free baseline reaches the final metal in about 509–515 h, manual in 544 h and premium in 182 h. Stealing and evolve-then-sell strategies are in docs/25. The table below is the original v2 run.
+> **Updated by [docs/25](25_REVIEW_REMEDIATION.md):** after the trophy cap (weapons you forged above your current metal sell like your best metal; stolen weapons keep their full value) the free baseline reaches the final metal in about 509–515 h, manual in 544 h and premium in 182 h. Stealing (which can shortcut the climb a lot, by owner decision) and evolve-then-sell strategies are in docs/25. The table below is the original v2 run.
 
 | Scenario | Seed | Final metal reached | Evolutions | Tin | Bronze | Iron | Steel | Silver | Gold |
 |---|---|---|---|---|---|---|---|---|---|

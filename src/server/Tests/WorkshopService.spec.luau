@@ -823,33 +823,27 @@ tests["durable transfer: a victim who left mid-save keeps whatever their final s
 	end)
 end
 
-tests["a stolen weapon's usable value follows the holder's progression"] = function()
+tests["stolen weapons keep their full value; old trophies above your metal sell like your best metal"] = function()
 	local holder = Economy.newProfile()
 	holder.unlockedTier = 3
-	local top = ForgeMath.rollWeapon({ NextNumber = function() return 0.999 end } :: any, 20, 2, 5, { id = "x", mult = 7 })
+	local top = ForgeMath.rollWeapon({ NextNumber = function() return 0.999 end } :: any, 20, 2, 5, { id = "s", mult = 7 })
 	local stolen = table.clone(top)
 	stolen.st = 1
-	local cap = ForgeMath.valueFor(3, stolen.r, stolen.q, stolen.t ~= nil, 0, stolen.c, 1)
-	assert(Economy.usableValue(holder, stolen, 1) == cap and cap < top.v / 1000, "capped to the same weapon in the holder's best metal")
-	local own = table.clone(top)
-	own.m = 3
-	own.v = 1234
-	assert(Economy.usableValue(holder, own, 1) == 1234, "own weapons in unlocked metals are worth their full value")
-	assert(Economy.usableValue(holder, top, 1) == cap, "an own weapon above the current metals (kept through evolution) is capped the same way")
-	-- display income and selling both use it
-	assert(math.abs(Economy.displayIncome(holder, stolen, 1) - cap * Balance.display.incomePerSecond) < 1e-9)
+	assert(Economy.usableValue(holder, stolen, 1) == top.v, "a stolen weapon sells for its full value")
 	holder.weapons.s = stolen
-	stolen.id = "s"
 	local ok, sold = Economy.sellWeapons(holder, { "s" }, nil, 1)
-	assert(ok and sold.coins == cap and holder.coins == cap, "the booth pays the usable value")
-	-- reaching the metal unlocks its value, but never more than the holder's own best roll there
+	assert(ok and sold.coins == top.v and holder.coins == top.v, "the booth pays the full value")
+	-- an own trophy above the current metal (kept through an evolution) is capped
+	local cap = ForgeMath.valueFor(3, top.r, top.q, top.t ~= nil, 0, top.c, 1)
+	assert(Economy.usableValue(holder, top, 1) == cap and cap < top.v, "own trophy above the current metal is capped")
+	local own = table.clone(top)
+	own.m, own.v = 3, 1234
+	assert(Economy.usableValue(holder, own, 1) == 1234, "own weapons in unlocked metals are worth their full value")
 	holder.unlockedTier = 20
-	local unlocked = Economy.usableValue(holder, stolen, 1)
-	assert(unlocked == ForgeMath.valueFor(20, stolen.r, stolen.q, stolen.t ~= nil, 0, stolen.c, 1) and unlocked < top.v, "another player's evolution bonus does not transfer")
-	assert(Economy.usableValue(holder, stolen, 7) == top.v or Economy.usableValue(holder, stolen, 7) <= top.v)
-	-- evolution sends the holder back to Copper: the cap applies again
-	holder.unlockedTier = 1
-	assert(Economy.usableValue(holder, stolen, 1) <= ForgeMath.maxValue(1, 1))
+	assert(Economy.usableValue(holder, top, 1) == top.v, "reaching the metal again restores the full value")
+	-- display income for a stolen weapon uses its value with the normal current-tier cap
+	holder.unlockedTier = 3
+	assert(math.abs(Economy.displayIncome(holder, stolen, 1) - math.min(top.v, ForgeMath.maxValue(3, 1)) * Balance.display.incomePerSecond) < 1e-6)
 end
 
 return tests
