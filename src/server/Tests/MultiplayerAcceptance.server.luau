@@ -33,6 +33,8 @@ end
 local function finish(passed, message)
 	if ended then return end
 	ended = true
+	local d = game:GetService("ReplicatedStorage"):FindFirstChild("FFAcceptanceDriver")
+	if d then d:Destroy() end
 	local restoreErrors = {}
 	for player in backups do
 		local restored, err = pcall(restore, player)
@@ -41,7 +43,7 @@ local function finish(passed, message)
 	TestService:EndTest({passed = passed, error = message, restoreErrors = restoreErrors,
 		checks = evidence, elapsedSec = os.clock() - started,
 		mode = Data and Data.getStatus().mode or "NotLoaded",
-		limitations = "Server gameplay calls, real timers and real character positions with two Studio clients; client UI input is checked separately."})
+		limitations = "Two Studio clients in one Studio server. Server calls plus real client prompts (ProximityPrompt InputHoldBegin/End), real character walking and client UI reads. Touch gestures, real network latency and multiple live servers are not exercised."})
 end
 local function waitUntil(predicate, seconds, label)
 	local deadline = os.clock() + seconds
@@ -52,7 +54,42 @@ local function waitUntil(predicate, seconds, label)
 	until false
 end
 -- A failed startup must still terminate the remote test instead of hanging Studio.
-task.delay(240, function() finish(false, "Acceptance watchdog timed out") end)
+task.delay(360, function() finish(false, "Acceptance watchdog timed out") end)
+
+-- Client driver (src/client/AcceptanceDriver): real clients use the real world prompts.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local driver = Instance.new("RemoteEvent")
+driver.Name = "FFAcceptanceDriver"
+driver.Parent = ReplicatedStorage
+local replies, readyClients, nextRequest = {}, {}, 0
+driver.OnServerEvent:Connect(function(player, requestId, result)
+	if requestId == "ready" then
+		readyClients[player] = true
+	elseif type(requestId) == "number" then
+		replies[requestId] = result
+	end
+end)
+local function ask(player, command, args, timeout)
+	nextRequest += 1
+	local id = nextRequest
+	driver:FireClient(player, id, command, args)
+	local deadline = os.clock() + (timeout or 20)
+	while replies[id] == nil do
+		assert(os.clock() < deadline, "Client did not answer " .. command)
+		task.wait(0.05)
+	end
+	local result = replies[id]
+	replies[id] = nil
+	assert(type(result) ~= "table" or result.error == nil, "Client error in " .. command .. ": " .. tostring(type(result) == "table" and result.error))
+	return result
+end
+local function askAsync(player, command, args, timeout)
+	local box = {}
+	task.spawn(function()
+		box.result = ask(player, command, args, timeout)
+	end)
+	return box
+end
 
 local passed, err = pcall(function()
 	local root = script.Parent.Parent
@@ -272,6 +309,104 @@ local passed, err = pcall(function()
 	waitUntil(function() return Workshop.carryOf(a) == nil end, 5, "tag return")
 	assert(pb.weapons[second.id] ~= nil and pb.showcase[2] == second.id, "Tagged weapon did not return")
 	table.insert(evidence, "Owner tagging the thief returns the weapon to its podium")
+
+	-- Real prompts on real clients: the thief client holds the actual steal ProximityPrompt.
+	waitUntil(function() return readyClients[a] and readyClients[b] end, 20, "client drivers")
+	Workshop._reset()
+	local jackpot = giveWeapon(pb, 1e15) -- endgame value: 7.5 s hold
+	assert(Economy.setShowcase(pb, 1, jackpot.id))
+	Plots.publish(b)
+	teleport(a, at(ped) * CFrame.new(0, 0, 3))
+	ask(a, "clear")
+	ask(b, "clear")
+	local promptInfo
+	waitUntil(function()
+		promptInfo = ask(a, "prompt", { plot = ib, slot = 1 })
+		return promptInfo.found and promptInfo.enabled and promptInfo.hold == 7.5
+	end, 10, "steal prompt enabled with a 7.5 s hold")
+	assert(promptInfo.object:find("hold 7.5s", 1, true), "Prompt text missing the hold time: " .. tostring(promptInfo.object))
+	assert(promptInfo.keyboard == "E" and promptInfo.gamepad == "ButtonX", "Prompt keys wrong")
+	table.insert(evidence, string.format("Client prompt for a $1Qa weapon: '%s' / '%s', hold %.1f s, keys %s / %s, touch tap-and-hold %s", promptInfo.action, promptInfo.object, promptInfo.hold, promptInfo.keyboard, promptInfo.gamepad, tostring(promptInfo.clickable)))
+
+	-- Let go early: nothing is stolen, the owner was alerted when the hold began.
+	local early = ask(a, "hold", { plot = ib, slot = 1, sec = 3 })
+	assert(early.began and not early.triggered, "Early release still triggered the prompt")
+	task.wait(0.5)
+	assert(Workshop.intentOf(a) == nil and Workshop.carryOf(a) == nil and pb.weapons[jackpot.id] ~= nil, "Early release left a hold or stole the weapon")
+	local victimUi = ask(b, "ui")
+	local alerted = false
+	for _, text in victimUi.toasts do
+		if text:find("is stealing your", 1, true) then alerted = true end
+	end
+	assert(alerted, "Owner was not alerted when the hold began")
+	table.insert(evidence, "Real client released the hold after 3 of 7.5 s: no steal; the owner's client got the 'is stealing your' alert")
+
+	-- Full 7.5 s hold through the real prompt, then a real walk home with Humanoid:MoveTo.
+	local full = ask(a, "hold", { plot = ib, slot = 1, sec = 7.8 })
+	assert(full.triggered, "Full hold did not trigger the prompt")
+	local carried = pcall(waitUntil, function() return Workshop.carryOf(a) ~= nil end, 3, "carry after the real prompt")
+	if not carried then
+		local trail = {}
+		for _, entry in Remotes.studioLog do
+			if entry.player == a.UserId then
+				table.insert(trail, string.format("%s=%s:%s", entry.action, tostring(entry.ok), tostring(entry.result)))
+			end
+		end
+		error("No carry after the real 7.5 s prompt. Thief's recent actions: " .. table.concat(trail, ", ") .. " (client held " .. string.format("%.2f", full.heldFor) .. " s)")
+	end
+	local thiefUi
+	waitUntil(function()
+		thiefUi = ask(a, "ui")
+		return thiefUi.banner ~= nil and thiefUi.carrying ~= nil
+	end, 5, "carry banner and marker on the thief's client")
+	table.insert(evidence, "Real client held the full 7.5 s: server started the carry; thief's screen shows '" .. thiefUi.banner .. "' and the carry marker")
+	local spawnPos = plotA.PlotSpawn.Position
+	local walked = ask(a, "walk", { x = spawnPos.X, y = spawnPos.Y, z = spawnPos.Z }, 40)
+	assert(walked.arrived, "Thief client could not walk home")
+	local delivered
+	waitUntil(function()
+		for _, w in pa.weapons do
+			if w.v == 1e15 and w.st == 1 then delivered = w end
+		end
+		return delivered ~= nil and next(pb.outbox or {}) == nil and next(pa.xferPending or {}) == nil
+	end, 30, "real-walk delivery and ledger settled")
+	assert(pb.weapons[jackpot.id] == nil, "Victim kept the delivered weapon")
+	local savedThief = Data.viewProfile(a.UserId)
+	local inSave = false
+	for _, w in (savedThief and savedThief.weapons or {}) do
+		if w.v == 1e15 and w.st == 1 then inSave = true end
+	end
+	assert(inSave, "Delivered weapon is not in the thief's saved profile (what a rejoin loads)")
+	table.insert(evidence, string.format("Thief client walked home at WalkSpeed %.1f in %.1f s (accepted as legitimate); the $1Qa weapon is in the thief's saved profile, which is what a rejoin loads", walked.walkSpeed, walked.elapsed))
+
+	-- The owner locks mid-hold: the steal is cancelled even though the client finishes holding.
+	Workshop._reset()
+	local guarded = giveWeapon(pb, 1e12) -- 6 s hold
+	assert(Economy.setShowcase(pb, 1, guarded.id))
+	Plots.publish(b)
+	teleport(a, at(ped) * CFrame.new(0, 0, 3))
+	teleport(b, plotB.LockButton.CFrame * CFrame.new(0, 0, -3))
+	ask(a, "clear")
+	waitUntil(function()
+		local info = ask(a, "prompt", { plot = ib, slot = 1 })
+		return info.enabled and info.hold == 6
+	end, 10, "6 s steal prompt")
+	local pending = askAsync(a, "hold", { plot = ib, slot = 1, sec = 6.4 }, 20)
+	task.wait(2)
+	local lockTap = ask(b, "hold", { lock = true, sec = 0.1 })
+	assert(lockTap.triggered, "Lock prompt did not trigger on the owner's client")
+	waitUntil(function() return pending.result ~= nil end, 15, "thief hold finished")
+	task.wait(0.5)
+	assert(Workshop.carryOf(a) == nil and pb.weapons[guarded.id] ~= nil, "Weapon stolen after the owner locked mid-hold")
+	local lockedUi = ask(a, "ui")
+	local told = false
+	for _, text in lockedUi.toasts do
+		if text:find("locked", 1, true) or text:find("Locked", 1, true) then told = true end
+	end
+	assert(told, "Thief was not told the forge locked")
+	table.insert(evidence, "Owner's client tapped LOCK 2 s into a 6 s real hold: no carry, weapon stayed, thief's client told the forge locked")
+	Workshop._reset()
+	teleport(b, CFrame.new(0, 2, 15)) -- back to the hub for the next section
 
 	-- Forge Lock: lasers keep others out and block stealing for 30 s.
 	assert(not Workshop.lockForge(b), "Locked from far away")

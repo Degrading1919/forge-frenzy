@@ -73,12 +73,23 @@ function DataService.registerMessageHandler(name: string, handler: (any, any, an
 end
 -- Queues a message into another player's saved profile, wherever they are. Returns success.
 function DataService.sendMessage(userId: number, message: any): boolean
-	if not store or type(userId) ~= "number" or userId <= 0 then return false end
+	if not store or type(userId) ~= "number" or userId == 0 then return false end
 	local ok, sent = pcall(function()
 		return store:MessageAsync(DataService.KEY_PREFIX .. userId, message)
 	end)
 	if not ok then warn("[DataService] message failed:", sent) end
 	return ok and sent ~= false
+end
+-- Reads another player's saved data without taking their session (ProfileStore:GetAsync). Returns
+-- the data table, {} when the player has no save, or nil when storage is unavailable or the read
+-- failed. Never write to the result.
+function DataService.viewProfile(userId: number): any?
+	if not store or type(userId) ~= "number" or userId == 0 then return nil end
+	local ok, view = pcall(function()
+		return store:GetAsync(DataService.KEY_PREFIX .. userId)
+	end)
+	if not ok then warn("[DataService] profile view failed:", view); return nil end
+	return if view then view.Data else {}
 end
 function DataService.get(player: any): any?
 	local session = sessions[player]

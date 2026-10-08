@@ -71,6 +71,11 @@ Logic.MOVE_SLACK = 10
 Logic.MIN_CARRY_SEC = 2
 -- Stolen-weapon ids a profile remembers so a re-sent delivery is never applied twice.
 Logic.LEDGER_SIZE = 1000
+-- A thief's pending steal whose victim never saved it is forgotten after this long. It is far
+-- longer than any save in flight (saves time out after 15 s; final release saves retry briefly).
+Logic.PENDING_EXPIRE_SEC = 30 * 60
+-- How often an online thief re-checks pending steals against the victim's saved profile.
+Logic.PENDING_CHECK_SEC = 5 * 60
 
 WorkshopService.changed = Instance.new("BindableEvent") -- (kind, payload) for the world glue
 WorkshopService.notify = Instance.new("BindableEvent") -- (player, text, kind)
@@ -189,21 +194,30 @@ end
 
 --[[
 	Steal ledger. Two profiles cannot be saved in one atomic write, so a delivered steal moves the
-	weapon in two durable steps:
+	weapon in three durable steps. Neither player has to come back for the thief to get it.
 
+	  0. markPending (thief): thief.xferPending[id] = { from = victim UserId, wid, at } is saved
+	     and confirmed first. Until then the weapon stays in the victim's backpack, protected like
+	     a carried weapon (it cannot be sold, moved or earn).
 	  1. beginTransfer (victim): the weapon leaves the victim's backpack and podium and is parked
-	     in victim.outbox[id] with the thief's UserId. The victim's profile is saved and the save
-	     confirmed. Until then nothing has been given to the thief; if the save fails while the
-	     victim is still here, cancelTransfer puts the weapon back.
-	  2. receive (thief): the weapon is added to the thief's backpack and the transfer id is
-	     recorded in thief.xferIn in the same profile, so receiving the same id twice does nothing.
-	     Once the thief's save is confirmed (or the delivery was queued as a ProfileStore message
-	     to the thief's saved profile), ack removes the outbox entry.
+	     in victim.outbox[id] with the thief's UserId. The victim's save is confirmed. If it fails
+	     while the victim is still here, cancelTransfer puts the weapon back.
+	  2. receive (thief): the weapon is added to the thief's backpack and the id is recorded in
+	     thief.xferIn (and removed from xferPending) in the same profile, so receiving the same id
+	     twice does nothing. Once the thief's save is confirmed (or the delivery was queued as a
+	     ProfileStore message to the thief's saved profile), ack removes the outbox entry.
 
-	Crash or disconnect at any point: a weapon is always either in the victim's saved backpack
-	(step 1 never saved), or in the victim's saved outbox (re-delivered when the victim's profile
-	next loads, and by a retry loop while it stays loaded), or in the thief's saved backpack with
-	its id in xferIn (any re-delivery is ignored). It is never in two backpacks and never in none.
+	Recovery runs from both sides:
+	  * the victim's profile re-sends its outbox when it loads and every 30 s while loaded;
+	  * the thief's profile, when it loads and every few minutes, reads the victim's saved profile
+	    (ProfileStore:GetAsync, read-only) for each pending id and receives the weapon from the
+	    victim's outbox. So a thief always gets a committed steal even if the victim never plays
+	    again. A pending id whose victim never committed (no outbox entry) expires after
+	    PENDING_EXPIRE_SEC.
+
+	At every point a weapon is in exactly one durable place: the victim's saved backpack (step 1
+	never saved), the victim's saved outbox, or the thief's saved backpack with its id in xferIn
+	(any re-delivery is ignored).
 ]]
 function Logic.beginTransfer(victimProfile: any, carry: Carry, transferId: string, toUserId: number, toName: string?, fromName: string?, now: number): (boolean, any)
 	local weapon = victimProfile.weapons[carry.weaponId]
@@ -248,8 +262,47 @@ end
 -- Step 2: gives the thief the weapon once per transfer id. Returns (true, weapon) or
 -- (false, "Duplicate") when this id was already received. A full backpack never loses a
 -- delivered weapon: it may go over the limit until the player sells.
+-- Step 0: the thief's profile remembers a steal it is owed before the victim gives it up.
+function Logic.markPending(thiefProfile: any, transferId: string, fromUserId: number, weaponId: string, now: number)
+	thiefProfile.xferPending = if type(thiefProfile.xferPending) == "table" then thiefProfile.xferPending else {}
+	thiefProfile.xferPending[transferId] = { from = fromUserId, wid = weaponId, at = now }
+end
+
+function Logic.clearPending(thiefProfile: any, transferId: string)
+	if type(thiefProfile.xferPending) == "table" then
+		thiefProfile.xferPending[transferId] = nil
+	end
+end
+
+--[[
+	Thief-side recovery for one pending steal, given the victim's saved profile data (`victimSaved`,
+	read-only; {} when the victim has no save). Returns "received" (weapon added), "waiting" (not
+	resolvable yet), "expired" (the victim never committed; pending dropped) or "done".
+]]
+function Logic.resolvePending(thiefProfile: any, transferId: string, victimSaved: any, now: number): (string, any)
+	local pending = type(thiefProfile.xferPending) == "table" and thiefProfile.xferPending[transferId]
+	if not pending then
+		return "done", nil
+	end
+	if type(thiefProfile.xferIn) == "table" and thiefProfile.xferIn[transferId] then
+		thiefProfile.xferPending[transferId] = nil
+		return "done", nil
+	end
+	local entry = type(victimSaved) == "table" and type(victimSaved.outbox) == "table" and victimSaved.outbox[transferId]
+	if type(entry) == "table" and type(entry.w) == "table" then
+		local received, copy = Logic.receive(thiefProfile, transferId, entry, now)
+		return if received then "received" else "done", copy
+	end
+	if now - (tonumber(pending.at) or 0) > Logic.PENDING_EXPIRE_SEC then
+		thiefProfile.xferPending[transferId] = nil
+		return "expired", nil
+	end
+	return "waiting", nil
+end
+
 function Logic.receive(thiefProfile: any, transferId: string, entry: any, now: number): (boolean, any)
 	thiefProfile.xferIn = if type(thiefProfile.xferIn) == "table" then thiefProfile.xferIn else {}
+	Logic.clearPending(thiefProfile, transferId)
 	if thiefProfile.xferIn[transferId] then
 		return false, "Duplicate"
 	end
@@ -315,6 +368,11 @@ local deps: any = {
 	sendMessage = function(_userId: number, _message: any): boolean
 		return false
 	end,
+	-- Reads another player's saved profile data (read-only, ProfileStore:GetAsync). Returns the
+	-- data table, {} when they have no save, or nil when the read failed.
+	viewProfile = function(_userId: number): any
+		return nil
+	end,
 	playerByUserId = function(userId: number): any
 		return Players:GetPlayerByUserId(userId)
 	end,
@@ -379,6 +437,9 @@ local stealIntent: { [any]: Intent } = {}
 local lastSteal: { [any]: number } = {}
 local slotCooldown: { [string]: number } = {} -- "victimUserId:slot" -> until
 local inFlight: { [string]: boolean } = {} -- transfer ids being saved/delivered right now
+-- Delivered steals whose thief's pending record is still being saved: the weapon is still in the
+-- victim's backpack and protected like a carried weapon.
+local securing: { [string]: { victim: any, weaponId: string } } = {}
 
 local function lockOf(plot: number): LockState
 	local lock = locks[plot]
@@ -412,6 +473,11 @@ function WorkshopService.carriedFrom(victim: any): { [string]: boolean }
 	for _, carry in carries do
 		if carry.victim == victim then
 			ids[carry.weaponId] = true
+		end
+	end
+	for _, hold in securing do
+		if hold.victim == victim then
+			ids[hold.weaponId] = true
 		end
 	end
 	return ids
@@ -591,8 +657,15 @@ function WorkshopService.stealCommit(thief: any, plot: any, slot: any): (boolean
 	return true, { weapon = carry.weapon, deadline = carry.deadline }
 end
 
+-- The thief let go. A real ProximityPrompt fires its hold-ended event (sent as StealCancel) at the
+-- moment the hold completes, before Triggered (StealCommit) arrives. So a cancel only counts while
+-- the hold is still short of its full time; after that it is the completion, and the commit that
+-- follows decides.
 function WorkshopService.stealCancel(thief: any)
-	stealIntent[thief] = nil
+	local intent = stealIntent[thief]
+	if intent and deps.now() - intent.at < intent.holdSec - Logic.STEAL_HOLD_TOLERANCE then
+		stealIntent[thief] = nil
+	end
 end
 
 -- Cancels holds that can no longer succeed: the thief walked off or died, the workshop changed
@@ -650,21 +723,60 @@ local function deliver(victimData: any, transferId: string)
 end
 WorkshopService._deliver = deliver
 
--- Step 1 then step 2 of a delivered steal (runs in its own thread: saves yield).
-local function finishTransfer(thief: any, victim: any, victimData: any, transferId: string)
+-- Steps 0, 1 and 2 of a delivered steal (runs in its own thread: saves yield).
+local function finishTransfer(thief: any, victim: any, carry: Carry, transferId: string)
 	inFlight[transferId] = true
-	local ok, saved = pcall(deps.saveNow, victim)
+	securing[transferId] = { victim = victim, weaponId = carry.weaponId }
+	local function abandon(text: string?)
+		securing[transferId] = nil
+		inFlight[transferId] = nil
+		deps.markDirty(victim)
+		if text then
+			WorkshopService.notify:Fire(thief, text, "bad")
+		end
+	end
+	-- Step 0: the thief's save records what it is owed.
+	local thiefData = deps.getProfile(thief)
+	if not thiefData then
+		return abandon(nil)
+	end
+	Logic.markPending(thiefData, transferId, userIdOf(victim), carry.weaponId, deps.now())
+	local okThief, thiefSaved = pcall(deps.saveNow, thief)
+	if not (okThief and thiefSaved) then
+		if deps.getProfile(thief) == thiefData then
+			Logic.clearPending(thiefData, transferId)
+		end
+		-- If the pending record did reach the save anyway, it expires: the victim keeps the weapon.
+		return abandon("The steal couldn't be saved, so the weapon went back home")
+	end
+	-- Step 1: the victim gives it up and that is saved.
+	local victimData = deps.getProfile(victim)
+	local ok = victimData ~= nil and Logic.beginTransfer(victimData, carry, transferId, userIdOf(thief), thief.DisplayName, victim.DisplayName, deps.now())
+	securing[transferId] = nil
+	if not ok then
+		if deps.getProfile(thief) == thiefData then
+			Logic.clearPending(thiefData, transferId)
+		end
+		return abandon("The weapon was gone before it could be saved")
+	end
+	deps.markDirty(victim)
+	local okVictim, victimSaved = pcall(deps.saveNow, victim)
 	inFlight[transferId] = nil
-	if not (ok and saved) then
+	if not (okVictim and victimSaved) then
 		if deps.getProfile(victim) == victimData and type(victimData.outbox) == "table" and victimData.outbox[transferId] then
 			Logic.cancelTransfer(victimData, transferId)
 			deps.markDirty(victim)
+			if deps.getProfile(thief) == thiefData then
+				Logic.clearPending(thiefData, transferId)
+			end
 			WorkshopService.notify:Fire(thief, "The steal couldn't be saved, so the weapon went back home", "bad")
 		end
-		-- Otherwise the victim already left: whatever their final save holds wins. A saved outbox
-		-- entry is delivered when they next join; if it never saved they still have the weapon.
+		-- Otherwise the victim already left and their final save decides: if it holds the outbox
+		-- entry, the thief's pending record collects it (thief-side recovery); if not, the
+		-- pending record expires and the victim still has the weapon.
 		return
 	end
+	-- Step 2.
 	deliver(victimData, transferId)
 end
 
@@ -709,16 +821,18 @@ function WorkshopService.stepCarries()
 				endCarry(thief, "ThiefLost")
 				continue
 			end
-			local transferId = deps.newId()
-			local ok = Logic.beginTransfer(victimProfile, carry, transferId, userIdOf(thief), thief.DisplayName, victim.DisplayName, now)
-			if not ok then
+			local held = victimProfile.weapons[carry.weaponId]
+			if not held or held.v ~= carry.weapon.v or held.ts ~= carry.weapon.ts then
 				endCarry(thief, "Gone")
 				continue
 			end
+			local transferId = deps.newId()
+			-- Protect the weapon before the carry ends, so there is no moment it could be sold.
+			securing[transferId] = { victim = victim, weaponId = carry.weaponId }
+			inFlight[transferId] = true
 			endCarry(thief, "Stolen")
 			WorkshopService.notify:Fire(thief, "Got it! Locking it in your backpack...", "good")
-			inFlight[transferId] = true
-			deps.spawn(finishTransfer, thief, victim, victimProfile, transferId)
+			deps.spawn(finishTransfer, thief, victim, carry, transferId)
 		end
 	end
 end
@@ -732,6 +846,34 @@ function WorkshopService.retryOutbox(player: any)
 	for transferId in data.outbox do
 		if not inFlight[transferId] then
 			deps.spawn(deliver, data, transferId)
+		end
+	end
+end
+
+-- Thief-side recovery: collects pending steals from the victims' saved profiles. Runs when the
+-- thief's profile loads and every PENDING_CHECK_SEC while they play.
+function WorkshopService.resolvePending(player: any)
+	local data = deps.getProfile(player)
+	if not data or type(data.xferPending) ~= "table" then
+		return
+	end
+	for transferId, pending in data.xferPending do
+		if inFlight[transferId] then
+			continue -- this server is still delivering it
+		end
+		local view = deps.viewProfile(tonumber(pending.from) or 0)
+		if view == nil then
+			continue -- read failed: try again later
+		end
+		if deps.getProfile(player) ~= data then
+			return -- the session ended while reading
+		end
+		local result, copy = Logic.resolvePending(data, transferId, view, deps.now())
+		if result == "received" then
+			WorkshopService.notify:Fire(player, "You kept your loot: " .. ForgeMath.weaponName(copy), "good")
+		end
+		if result ~= "waiting" then
+			deps.markDirty(player)
 		end
 	end
 end
@@ -899,6 +1041,7 @@ function WorkshopService._reset()
 	table.clear(lastSteal)
 	table.clear(slotCooldown)
 	table.clear(inFlight)
+	table.clear(securing)
 end
 
 function WorkshopService.init()
@@ -915,6 +1058,9 @@ function WorkshopService.init()
 	end
 	deps.sendMessage = function(userId, message)
 		return DataService.sendMessage(userId, message)
+	end
+	deps.viewProfile = function(userId)
+		return DataService.viewProfile(userId)
 	end
 	DataService.registerMessageHandler("steal", WorkshopService.onMessage)
 	deps.owns = function(player, key)
@@ -939,8 +1085,10 @@ function WorkshopService.init()
 		if gap > 0 then
 			WorkshopService.settleOffline(player, gap)
 		end
-		-- Weapons stolen from this player that were never confirmed delivered.
+		-- Weapons stolen from this player that were never confirmed delivered, and steals this
+		-- player is still owed.
 		WorkshopService.retryOutbox(player)
+		task.spawn(WorkshopService.resolvePending, player)
 	end)
 end
 
@@ -964,7 +1112,7 @@ function WorkshopService.start()
 	end)
 	task.spawn(function()
 		local last = os.clock()
-		local acc, retryAcc = 0, 0
+		local acc, retryAcc, pendingAcc = 0, 0, 0
 		while true do
 			task.wait(0.2)
 			local now = os.clock()
@@ -981,6 +1129,13 @@ function WorkshopService.start()
 			ok, err = pcall(WorkshopService.enforceLocks)
 			if not ok then
 				warn("[WorkshopService] locks", err)
+			end
+			pendingAcc += dt
+			if pendingAcc >= Logic.PENDING_CHECK_SEC then
+				pendingAcc = 0
+				for _, player in Players:GetPlayers() do
+					task.spawn(pcall, WorkshopService.resolvePending, player)
+				end
 			end
 			retryAcc += dt
 			if retryAcc >= 30 then

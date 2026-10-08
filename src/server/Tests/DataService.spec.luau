@@ -256,7 +256,7 @@ tests["sendMessage queues into the player's key and fails closed without storage
 	end})
 	service.init()
 	assert(service.sendMessage(5, { kind = "steal" }) == true and sent[1][1] == "Player_5")
-	assert(service.sendMessage(-1, {}) == false and service.sendMessage("5" :: any, {}) == false, "bad ids refused")
+	assert(service.sendMessage(0, {}) == false and service.sendMessage("5" :: any, {}) == false, "bad ids refused")
 end
 
 return tests

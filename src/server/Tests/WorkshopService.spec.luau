@@ -190,7 +190,7 @@ local function runtime(fn: (any) -> ())
 	end
 	local savedWorld = table.clone(WorkshopService.world)
 	local savedPlayers = rawget(Players, "GetPlayers")
-	local state: any = { now = 1000, saved = 0, notes = {}, owned = {}, persisted = {}, messages = {}, ids = 0 }
+	local state: any = { now = 1000, saved = 0, notes = {}, owned = {}, persisted = {}, messages = {}, ids = 0, deferred = {} }
 	local thief, thiefRoot = fakePlayer(-9001, "Thief", 100)
 	local victim, victimRoot = fakePlayer(-9002, "Victim", 0)
 	local profiles = { [thief] = Economy.newProfile(), [victim] = victimProfile() }
@@ -204,6 +204,17 @@ local function runtime(fn: (any) -> ())
 			return profiles[player]
 		end,
 		markDirty = function() end,
+		viewProfile = function(userId)
+			if state.viewFails then
+				return nil
+			end
+			for player, saved in state.persisted do
+				if player.UserId == userId then
+					return deepCopy(saved)
+				end
+			end
+			return {}
+		end,
 		saveNow = function(player)
 			state.saved += 1
 			if state.onSave and state.onSave(player) == false then
@@ -236,7 +247,11 @@ local function runtime(fn: (any) -> ())
 			return "T" .. state.ids
 		end,
 		spawn = function(fn, ...)
-			fn(...)
+			if state.deferSpawn then
+				table.insert(state.deferred, table.pack(fn, ...))
+			else
+				fn(...)
+			end
 		end,
 		now = function()
 			return state.now
@@ -366,7 +381,8 @@ tests["a delivered steal moves the weapon, protects it while carried, and notifi
 		end
 		assert(stolen.v == 5000 and thiefData.weapons[stolen.id] == stolen and thiefData.nextWeaponId == 2, "fresh id from the thief's own counter")
 		assert(stolen.sf == "Victim")
-		assert(s.saved == 2, "both profiles saved at once after a transfer, saved " .. s.saved)
+		assert(s.saved == 3, "thief (pending), victim (outbox), thief (weapon) saved in order, saved " .. s.saved)
+		assert(next(victimData.outbox) == nil and next(thiefData.xferPending) == nil, "ledger fully settled")
 		-- the weapon is gone: a repeated step cannot duplicate it
 		WorkshopService.stepCarries()
 		assert(Economy.weaponCount(thiefData) == 1 and Economy.weaponCount(victimData) == 1)
@@ -762,7 +778,15 @@ tests["durable transfer: a crash at any stage never duplicates or destroys the w
 		-- Stage A: crash after the victim's save but before the thief received anything.
 		s.persisted[s.victim] = deepCopy(s.profiles[s.victim])
 		s.persisted[s.thief] = deepCopy(s.profiles[s.thief])
-		s.saveFails = { [s.thief] = true }
+		local thiefSaves = 0
+		s.onSave = function(player)
+			if player == s.thief then
+				thiefSaves += 1
+				if thiefSaves > 1 then
+					return false -- the pending record saved; the delivery save does not
+				end
+			end
+		end
 		startCarry(s)
 		walk(s, 100)
 		assert(next(s.persisted[s.victim].outbox) ~= nil and s.persisted[s.victim].weapons.w1 == nil, "victim saved with the weapon parked in the outbox")
@@ -770,7 +794,7 @@ tests["durable transfer: a crash at any stage never duplicates or destroys the w
 		-- crash: both reload from what was saved
 		s.profiles[s.victim] = deepCopy(s.persisted[s.victim])
 		s.profiles[s.thief] = deepCopy(s.persisted[s.thief])
-		s.saveFails = nil
+		s.onSave = nil
 		WorkshopService.retryOutbox(s.victim) -- the victim's profile loads on a new server
 		assert(Economy.weaponCount(s.profiles[s.thief]) == 1, "the thief receives it")
 		assert(next(s.profiles[s.victim].outbox) == nil, "outbox acknowledged")
@@ -844,6 +868,122 @@ tests["stolen weapons keep their full value; old trophies above your metal sell 
 	-- display income for a stolen weapon uses its value with the normal current-tier cap
 	holder.unlockedTier = 3
 	assert(math.abs(Economy.displayIncome(holder, stolen, 1) - math.min(top.v, ForgeMath.maxValue(3, 1)) * Balance.display.incomePerSecond) < 1e-6)
+end
+
+
+tests["thief-side recovery: a committed steal reaches the thief even if the victim never returns"] = function()
+	runtime(function(s)
+		s.persisted[s.victim] = deepCopy(s.profiles[s.victim])
+		s.persisted[s.thief] = deepCopy(s.profiles[s.thief])
+		local thiefSaves = 0
+		s.onSave = function(player)
+			if player == s.thief then
+				thiefSaves += 1
+				if thiefSaves > 1 then
+					return false
+				end
+			end
+		end
+		startCarry(s)
+		walk(s, 100)
+		-- crash: the thief's saved profile only has the pending record, the victim's has the outbox
+		assert(next(s.persisted[s.thief].xferPending) ~= nil and Economy.weaponCount(s.persisted[s.thief]) == 0)
+		assert(next(s.persisted[s.victim].outbox) ~= nil)
+		s.onSave = nil
+		s.profiles[s.thief] = deepCopy(s.persisted[s.thief])
+		s.profiles[s.victim] = nil -- the victim never plays again
+		-- the thief's profile loads somewhere: recovery reads the victim's save
+		s.viewFails = true
+		WorkshopService.resolvePending(s.thief)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 0 and next(s.profiles[s.thief].xferPending) ~= nil, "a failed read waits")
+		s.viewFails = nil
+		WorkshopService.resolvePending(s.thief)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 1 and next(s.profiles[s.thief].xferPending) == nil, "collected from the victim's saved outbox")
+		WorkshopService.resolvePending(s.thief)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 1, "no second copy")
+		-- much later the victim does come back and re-sends: ignored
+		s.profiles[s.victim] = deepCopy(s.persisted[s.victim])
+		WorkshopService.retryOutbox(s.victim)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 1 and next(s.profiles[s.victim].outbox) == nil)
+	end)
+end
+
+tests["thief-side recovery: a steal the victim never saved expires and the victim keeps the weapon"] = function()
+	runtime(function(s)
+		s.persisted[s.victim] = deepCopy(s.profiles[s.victim])
+		s.persisted[s.thief] = deepCopy(s.profiles[s.thief])
+		-- the victim's commit save never lands, and the server crashes before anything else
+		s.onSave = function(player)
+			if player == s.victim then
+				s.profiles[s.victim] = nil -- released: no in-memory rollback possible
+				return false
+			end
+		end
+		local victimData = s.profiles[s.victim]
+		startCarry(s)
+		walk(s, 100)
+		s.onSave = nil
+		assert(s.persisted[s.victim].weapons.w1 ~= nil, "the victim's save still holds the weapon")
+		s.profiles[s.thief] = deepCopy(s.persisted[s.thief])
+		WorkshopService.resolvePending(s.thief)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 0 and next(s.profiles[s.thief].xferPending) ~= nil, "not resolvable yet")
+		s.now += Logic.PENDING_EXPIRE_SEC + 1
+		WorkshopService.resolvePending(s.thief)
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 0 and next(s.profiles[s.thief].xferPending) == nil, "expired without a weapon")
+		assert(countCopies({ s.persisted[s.victim], s.profiles[s.thief] }, 5000) == 1, "exactly one copy: the victim's")
+		assert(victimData ~= nil)
+	end)
+end
+
+tests["a failed thief save before anything moves leaves the weapon with the victim"] = function()
+	runtime(function(s)
+		local victimData, thiefData = s.profiles[s.victim], s.profiles[s.thief]
+		s.saveFails = { [s.thief] = true }
+		startCarry(s)
+		walk(s, 100)
+		assert(victimData.weapons.w1 ~= nil and victimData.showcase[1] == "w1" and next(victimData.outbox or {}) == nil)
+		assert(Economy.weaponCount(thiefData) == 0 and next(thiefData.xferPending or {}) == nil)
+		assert(not WorkshopService.carriedFrom(s.victim).w1, "protection released")
+	end)
+end
+
+tests["while a delivered steal is being saved the weapon cannot be sold or earn"] = function()
+	runtime(function(s)
+		local victimData = s.profiles[s.victim]
+		s.deferSpawn = true
+		startCarry(s)
+		walk(s, 100)
+		assert(WorkshopService.carryOf(s.thief) == nil and #s.deferred == 1, "carry over, saves pending")
+		assert(WorkshopService.carriedFrom(s.victim).w1, "still protected")
+		local sold = Economy.sellWeapons(victimData, { "w1" }, WorkshopService.carriedFrom(s.victim))
+		assert(not sold and victimData.weapons.w1 ~= nil)
+		assert(WorkshopService.incomePerSec(s.victim) == 0)
+		s.deferSpawn = false
+		local job = table.remove(s.deferred)
+		job[1](table.unpack(job, 2, job.n))
+		assert(Economy.weaponCount(s.profiles[s.thief]) == 1 and victimData.weapons.w1 == nil)
+	end)
+end
+
+
+tests["the prompt's hold-ended event at completion does not cancel the steal, an early release does"] = function()
+	runtime(function(s)
+		s.thiefRoot.Position = pos(0)
+		local hold = Logic.holdSec(s.profiles[s.victim].weapons.w1)
+		-- early release: cancelled
+		assert(WorkshopService.stealBegin(s.thief, 1, 1))
+		s.now += hold / 2
+		WorkshopService.stealCancel(s.thief)
+		assert(WorkshopService.intentOf(s.thief) == nil, "early release cancels")
+		s.now += hold
+		assert(select(2, WorkshopService.stealCommit(s.thief, 1, 1)) == "NoIntent")
+		-- full hold: a real prompt sends hold-ended (cancel) just before Triggered (commit)
+		assert(WorkshopService.stealBegin(s.thief, 1, 1))
+		s.now += hold
+		WorkshopService.stealCancel(s.thief)
+		assert(WorkshopService.intentOf(s.thief) ~= nil, "completion is not a cancel")
+		assert(WorkshopService.stealCommit(s.thief, 1, 1), "commit after the completion event succeeds")
+	end)
 end
 
 return tests

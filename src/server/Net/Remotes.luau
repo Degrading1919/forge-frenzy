@@ -11,6 +11,7 @@ local Protocol = require(Shared.Protocol)
 local A = Protocol.Actions
 
 local Remotes = {}
+Remotes.studioLog = {} :: { any }
 
 local servicesFolder = script.Parent.Parent:FindFirstChild("Services")
 local cache: { [string]: any } = {}
@@ -683,6 +684,13 @@ function Remotes.init()
 		times[name] = now
 		local ok, res = handler(player, ...)
 		Remotes.markDirty(player)
+		if RunService:IsStudio() then
+			-- Studio-only trail of recent actions for acceptance diagnostics.
+			table.insert(Remotes.studioLog, { player = player.UserId, action = name, ok = ok, result = if type(res) == "string" then res else nil, at = os.clock() })
+			if #Remotes.studioLog > 50 then
+				table.remove(Remotes.studioLog, 1)
+			end
+		end
 		return ok, res
 	end
 
