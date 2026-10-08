@@ -62,10 +62,14 @@ local function openDetail(w: any)
 	pack.dName.TextColor3 = color
 	pack.dRarity.Text = string.upper(Theme.RarityNames[w.r] or "") .. (if w.sf then ("  ·  stolen from " .. w.sf) else "")
 	pack.dRarity.TextColor3 = color
+	local usable = Kit.usableValue(p, w)
 	pack.dValue.Text = Theme.money(w.v)
-	local B = Kit.balance()
-	local perSec = w.v * (B and B.display.incomePerSecond or 0.001)
-	pack.dIncome.Text = "On display: " .. Theme.moneyRate(perSec)
+	local income = "On display: " .. Theme.moneyRate(Kit.displayIncome(p, w))
+	if usable < w.v then
+		-- A stolen weapon above your metals: it keeps its value, but pays like your best metal.
+		income = string.format("Sells for %s until you unlock %s · %s", Theme.money(usable), Data.mat(w.m).name, income)
+	end
+	pack.dIncome.Text = income
 	Viewport.weapon(pack.detailCard, w, true, { Size = UDim2.fromOffset(220, 220), Position = UDim2.new(0.5, 0, 0, 64), AnchorPoint = Vector2.new(0.5, 0) }, pack.viewport)
 	local shown = isDisplayed(p, w.id)
 	Theme.setText(pack.dDisplay, if shown then "TAKE DOWN" else "DISPLAY")
@@ -112,7 +116,7 @@ local function buildBackpack()
 	pack.viewport = Viewport.weapon(card, { m = 1, c = 1, r = 1, d = "sword_broad" }, false, { Size = UDim2.fromOffset(220, 220), Position = UDim2.new(0.5, 0, 0, 64), AnchorPoint = Vector2.new(0.5, 0) })
 	pack.viewport.ZIndex = 22
 	pack.dValue = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 40), Position = UDim2.fromOffset(10, 288), TextSize = 38, TextColor3 = C.cash, ZIndex = 22, Parent = card })
-	pack.dIncome = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 26), Position = UDim2.fromOffset(10, 328), TextSize = 21, TextColor3 = C.yellow, ZIndex = 22, Parent = card })
+	pack.dIncome = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 26), Position = UDim2.fromOffset(10, 328), TextSize = 21, TextScaled = true, TextColor3 = C.yellow, ZIndex = 22, Parent = card })
 	pack.dDisplay = Theme.button({ Text = "DISPLAY", Color = C.purple, Size = UDim2.fromOffset(250, 64), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 364), TextSize = 30, ZIndex = 22, OnClick = function()
 		local w = pack.detailWeapon
 		if not w then return end
@@ -183,7 +187,7 @@ local function sellPreview(p: any): (number, number)
 	for _, w in p.weapons or {} do
 		if not isDisplayed(p, w.id) and not carried[w.id] and (sellKeep == nil or w.r < sellKeep) then
 			count += 1
-			total += w.v
+			total += Kit.usableValue(p, w)
 		end
 	end
 	return count, total

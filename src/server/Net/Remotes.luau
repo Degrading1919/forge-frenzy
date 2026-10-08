@@ -263,7 +263,7 @@ local FRIENDLY = {
 	UnknownWeapon = "That weapon is gone", InvalidStation = "Build that forge first",
 	ForgeLocked = "This forge is locked!", Shielded = "New players are protected",
 	EmptySlot = "Nothing there to steal", AlreadyCarried = "Someone is already stealing that",
-	StealCooldown = "Catch your breath first", AlreadyCarrying = "You're already carrying loot",
+	StealCooldown = "Catch your breath first", Moved = "The weapon moved!", TooSlow = "Too slow, try again", AlreadyCarrying = "You're already carrying loot",
 	OwnWeapon = "That's yours!", SlotCooldown = "That podium was just robbed", TooFast = "Hold to steal",
 	LockCooldown = "Lock is recharging", AlreadyLocked = "Already locked", NoWorkshop = "No workshop",
 	["egg locked"] = "Unlock more materials to open this egg",
@@ -308,12 +308,23 @@ end
 
 local handlers: { [string]: (Player, ...any) -> (boolean, any) } = {}
 
+-- Station actions must come from the station: the player has to stand where that panel opens
+-- (Net/Plots.nearPlace). Automation that is already running keeps going when they walk away.
+local AWAY = "Walk back to the station first"
+local function at(player: Player, kind: string, arg: any?): boolean
+	return plots().nearPlace(player, kind, arg)
+end
+Remotes.at = at
+
 handlers[A.ForgeBegin] = function(player, station, mode)
 	if not isInt(station, 1, 3) then
 		return false, "Invalid forge"
 	end
 	if mode ~= "manual" and mode ~= "free" and mode ~= "premium" then
 		return false, "Invalid mode"
+	end
+	if mode ~= "manual" and not at(player, "Forge", station) then
+		return false, AWAY -- manual forging checks its own (closer) range in ForgeService
 	end
 	return call("ForgeService", "begin", player, station, mode)
 end
@@ -327,17 +338,26 @@ handlers[A.ForgeConfigure] = function(player, station, materialIndex, classIndex
 	if not isInt(station, 1, 3) or not isInt(materialIndex, 1, MATERIAL_COUNT) or not isInt(classIndex, 1, 5) or not isInt(keep, 1, 7) then
 		return false, "Invalid recipe"
 	end
+	if not at(player, "Forge", station) then
+		return false, AWAY
+	end
 	return call("ForgeService", "configure", player, station, materialIndex, classIndex, keep)
 end
 handlers[A.LineMaterial] = function(player, line, index)
 	if not isInt(line, 1, 3) or not isInt(index, 1, MATERIAL_COUNT) then
 		return false, "Invalid material"
 	end
+	if not at(player, "Ore", line) then
+		return false, AWAY
+	end
 	return call("ProductionService", "setLineMaterial", player, line, index)
 end
 handlers[A.UnlockMaterial] = function(player, index, line)
 	if not isInt(index, 1, MATERIAL_COUNT) or (line ~= nil and not isInt(line, 1, 3)) then
 		return false, "Invalid material"
+	end
+	if not at(player, "Ore", line) then
+		return false, AWAY
 	end
 	local ok, res = call("ProductionService", "unlockMaterial", player, index, line)
 	if ok then
@@ -348,6 +368,11 @@ end
 handlers[A.BuyUpgrade] = function(player, track)
 	if type(track) ~= "string" or (not table.find(MACHINE_TRACKS, track) and not table.find(GEAR_TRACKS, track)) then
 		return false, "Invalid upgrade"
+	end
+	local Balance = config("Balance")
+	local place = Balance and Balance.tracks[track] and Balance.tracks[track].station
+	if not place or not at(player, place) then
+		return false, AWAY
 	end
 	return call("UpgradeService", "buy", player, track)
 end
@@ -368,7 +393,9 @@ handlers[A.SellAll] = function(player, keepFrom)
 	if not plots().nearBooth(player) then
 		return false, "Sell at the booth in the middle of town!"
 	end
-	local ok, res = call("ForgeService", "sellAll", player, keepFrom, carriedOf(player))
+	local Forge = svc("ForgeService")
+	local mult = Forge and safe(Forge.cashMultiplier, player) or 1
+	local ok, res = call("ForgeService", "sellAll", player, keepFrom, carriedOf(player), mult)
 	if ok then
 		Remotes.push(player, Protocol.Push.Sold, { coins = res.coins, count = #res.sold })
 	end
@@ -386,7 +413,9 @@ handlers[A.SellWeapons] = function(player, ids)
 	if not plots().nearBooth(player) then
 		return false, "Sell at the booth in the middle of town!"
 	end
-	local ok, res = call("ForgeService", "sellWeapons", player, ids, carriedOf(player))
+	local Forge = svc("ForgeService")
+	local mult = Forge and safe(Forge.cashMultiplier, player) or 1
+	local ok, res = call("ForgeService", "sellWeapons", player, ids, carriedOf(player), mult)
 	if ok then
 		Remotes.push(player, Protocol.Push.Sold, { coins = res.coins, count = #res.sold })
 	end
@@ -459,6 +488,9 @@ handlers[A.Hatch] = function(player, eggId, count)
 	if type(eggId) ~= "string" or #eggId > 32 or not (count == 1 or count == 3 or count == 5) then
 		return false, "Invalid hatch"
 	end
+	if not at(player, "Egg", eggId) then
+		return false, "Walk to that egg first"
+	end
 	local ok, pets = call("CompanionService", "hatch", player, eggId, count)
 	if ok then
 		Remotes.push(player, Protocol.Push.Hatched, { pets = pets })
@@ -503,6 +535,9 @@ handlers[A.EvolutionStatus] = function(player)
 	return call("EvolutionService", "status", player)
 end
 handlers[A.Evolve] = function(player, protected)
+	if not at(player, "Altar") then
+		return false, "Walk to the Evolution Altar first"
+	end
 	local Forge = svc("ForgeService")
 	if Forge then
 		safe(Forge.stopAuto, player, nil)

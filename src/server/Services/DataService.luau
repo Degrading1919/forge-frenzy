@@ -10,7 +10,7 @@ DataService.profileChanged = Instance.new("BindableEvent")
 DataService.profileLoaded = Instance.new("BindableEvent")
 local sessions: {[any]: any} = {}
 local loading: {[any]: boolean} = {}
-local extraDefaults, releaseHooks = {}, {}
+local extraDefaults, releaseHooks, messageHandlers = {}, {}, {}
 local store: any = nil
 local initialized, started, closing = false, false, false
 local mode, storeName, apiState = "Unavailable", DataService.STORE_NAME, "NotReady"
@@ -63,6 +63,22 @@ local function runReleaseHooks(player: any, session: any, reason: string)
 		local ok, err = pcall(releaseHooks[name], player, session.data, reason)
 		if not ok then warn(`[DataService] release hook {name}: {err}`) end
 	end
+end
+-- Messages queued to a profile with sendMessage (ProfileStore:MessageAsync) are offered to each
+-- handler while the profile is loaded. A handler returns true when it applied (or already
+-- applied) the message; it is then marked processed and cleared on the next save. Handlers
+-- must be idempotent: a message can be offered again if the server stops before that save.
+function DataService.registerMessageHandler(name: string, handler: (any, any, any) -> boolean)
+	messageHandlers[name] = handler
+end
+-- Queues a message into another player's saved profile, wherever they are. Returns success.
+function DataService.sendMessage(userId: number, message: any): boolean
+	if not store or type(userId) ~= "number" or userId <= 0 then return false end
+	local ok, sent = pcall(function()
+		return store:MessageAsync(DataService.KEY_PREFIX .. userId, message)
+	end)
+	if not ok then warn("[DataService] message failed:", sent) end
+	return ok and sent ~= false
 end
 function DataService.get(player: any): any?
 	local session = sessions[player]
@@ -163,6 +179,20 @@ local function attachProfile(player: any, profile: any)
 	playerStatus(player, "Loaded")
 	DataService.profileLoaded:Fire(player, session.data)
 	DataService.markDirty(player)
+	if type(profile.MessageHandler) == "function" then
+		profile:MessageHandler(function(message, processed)
+			if sessions[player] ~= session then return end
+			for name, handler in messageHandlers do
+				local ok, handled = pcall(handler, player, session.data, message)
+				if not ok then warn(`[DataService] message handler {name}: {handled}`) end
+				if ok and handled then
+					processed()
+					DataService.markDirty(player)
+					return
+				end
+			end
+		end)
+	end
 end
 local function loadPlayer(player: any)
 	if sessions[player] or loading[player] or closing then return end

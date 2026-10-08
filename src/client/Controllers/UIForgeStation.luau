@@ -181,13 +181,12 @@ local function build()
 	Panels.section(forge, 6, "3", "AUTO FORGE")
 	local autoRow = Theme.make("Frame", { LayoutOrder = 7, Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1, Parent = forge })
 	Theme.list(autoRow, 8, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
-	ui.modeOff = Theme.button({ Text = "OFF", Color = C.blue, Size = UDim2.fromOffset(130, 62), TextSize = 26, LayoutOrder = 1, OnClick = function() modeChoice[station] = "off"; M.refresh() end, Parent = autoRow })
-	ui.modeFree = Theme.button({ Text = "AUTO 1.5x", Color = C.green, Size = UDim2.fromOffset(160, 62), TextSize = 24, LayoutOrder = 2, OnClick = function() modeChoice[station] = "free"; M.refresh() end, Parent = autoRow })
+	ui.modeOff = Theme.button({ Text = "OFF", Color = C.blue, Size = UDim2.fromOffset(130, 62), TextSize = 26, LayoutOrder = 1, OnClick = function() M.chooseMode("off") end, Parent = autoRow })
+	ui.modeFree = Theme.button({ Text = "AUTO 1.5x", Color = C.green, Size = UDim2.fromOffset(160, 62), TextSize = 24, LayoutOrder = 2, OnClick = function() M.chooseMode("free") end, Parent = autoRow })
 	ui.modePremium = Theme.button({ Text = "PREMIUM 4x", Color = C.purple, Size = UDim2.fromOffset(170, 62), TextSize = 22, LayoutOrder = 3, OnClick = function()
 		local p = profile()
 		if p and p.entitlements and p.entitlements.PremiumAutoForge then
-			modeChoice[station] = "premium"
-			M.refresh()
+			M.chooseMode("premium")
 		else
 			Toast.show("Premium Auto Forge is in the SHOP", "info")
 		end
@@ -277,7 +276,8 @@ function M.refresh()
 	-- Mode.
 	local st = p.forgeStatus and p.forgeStatus[station]
 	local running = st ~= nil and st.auto
-	local mode = modeChoice[station] or (if running then st.mode else "off")
+	-- While Auto Forge runs, the buttons show what the server is really doing.
+	local mode = if running then st.mode else (modeChoice[station] or "off")
 	modeChoice[station] = mode
 	local autoOk = p.autoUnlocked == true
 	Theme.setColor(ui.modeOff, if mode == "off" then C.blue else C.grey)
@@ -317,6 +317,31 @@ function M.refresh()
 	local enough = (p.ingots and p.ingots[r.m] or 0) >= Kit.recipe(r.c)
 	Theme.setText(ui.begin, if mode == "off" then "BEGIN!" else "START AUTO!")
 	Theme.setEnabled(ui.begin, enough or mode ~= "off")
+end
+
+--[[
+	Picks the auto mode. While this forge's Auto Forge is running the choice applies at once on
+	the server: OFF stops it, the other mode restarts the loop in that mode (the forge in progress
+	is dropped without spending ingots). Otherwise it only chooses what BEGIN will start.
+]]
+function M.chooseMode(mode: string)
+	local p = profile()
+	local st = p and p.forgeStatus and p.forgeStatus[station]
+	local runningMode = if st and st.auto then st.mode else nil
+	if runningMode and mode ~= runningMode then
+		if mode == "off" then
+			if not Kit.call("ForgeStop", station) then
+				return
+			end
+			Toast.show("Auto Forge stopped", "info")
+		elseif Kit.call("ForgeBegin", station, mode) then
+			Toast.show(if mode == "premium" then "Switched to PREMIUM 4x" else "Switched to AUTO 1.5x", "good")
+		else
+			return -- refused: keep showing what is really running
+		end
+	end
+	modeChoice[station] = mode
+	M.refresh()
 end
 
 function M.begin()

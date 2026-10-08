@@ -29,6 +29,31 @@ function Kit.balance(): any
 	return Data.config("Balance")
 end
 
+-- The shared economy rules, so the client shows exactly what the server pays.
+function Kit.economy(): any?
+	local shared = game:GetService("ReplicatedStorage"):FindFirstChild("Shared")
+	local module = shared and shared:FindFirstChild("Economy")
+	if not module then return nil end
+	local ok, Economy = pcall(require, module)
+	return if ok then Economy else nil
+end
+
+-- What weapon `w` sells for right now (a stolen weapon is capped by your progression).
+function Kit.usableValue(p: any, w: any): number
+	local Economy = Kit.economy()
+	if not Economy or not p then return w.v end
+	local ok, value = pcall(Economy.usableValue, p, w, p.cashMult or 1)
+	return if ok then value else w.v
+end
+
+-- What weapon `w` earns per second on a podium, exactly as the server pays it.
+function Kit.displayIncome(p: any, w: any): number
+	local Economy = Kit.economy()
+	if not Economy or not p then return 0 end
+	local ok, value = pcall(Economy.displayIncome, p, w, p.cashMult or 1)
+	return if ok then value else 0
+end
+
 function Kit.recipe(classIndex: number): number
 	local B = Kit.balance()
 	local class = B and B.weaponClasses[classIndex]

@@ -3,24 +3,30 @@
 	WorkshopService — the social tycoon layer of a workshop (docs/21 §8-11, docs/22):
 	build pads, display income and its cash collector, Forge Lock and weapon stealing.
 
-	Profile fields used: pads, showcase, weapons, bank (Economy), weaponsForged.
-	Session-only state (never saved): lock timers and in-flight steals.
+	Profile fields used: pads, showcase, weapons, bank (Economy), weaponsForged, and the steal
+	ledger: outbox (weapons stolen from this player that are still being delivered) and xferIn
+	(ids of stolen weapons this player already received).
+	Session-only state (never saved): lock timers, steal holds and carries.
 
 	Stealing is playful and recoverable:
-	  * A thief walks into another workshop, holds the steal prompt on a podium for
-	    STEAL_HOLD_SEC (server-timed between StealBegin and StealCommit), and then carries the
-	    weapon, slowed down, with a glowing marker over their head.
-	  * The owner gets an alert. Touching the thief (within TAG_RANGE) returns the weapon to its
-	    podium. So does the thief dying, leaving, or not getting home within CARRY_SEC.
-	  * Only when the thief reaches their own workshop does ownership transfer: the weapon leaves
-	    the victim's profile and enters the thief's backpack in one non-yielding step.
-	  * While a weapon is being carried it stays in the victim's profile (it cannot be sold or
-	    moved), so a disconnect at any moment can never duplicate or destroy it.
+	  * A thief holds the steal prompt on a podium. The hold time grows with the weapon's value
+	    (Shared/Steal: 2 s for starter weapons up to 8 s for the best endgame weapons). The server
+	    times the hold from StealBegin to StealCommit and pins the exact weapon at StealBegin: if
+	    that weapon is moved, replaced, sold or locked away, or the thief walks off or dies, the
+	    hold is cancelled and nothing can be stolen.
+	  * The thief then carries the weapon, slowed down, with a glowing marker over their head.
+	    The owner gets an alert when the hold starts and when the weapon is grabbed. Touching the
+	    thief (within TAG_RANGE) returns it. So does the thief dying, leaving, moving faster than
+	    a running carrier can (teleporting), or not getting home within CARRY_SEC.
+	  * While a weapon is carried it stays in the victim's profile (it cannot be sold or moved).
+	  * Delivery is a durable two-step transfer (see "Steal ledger" below), so a failed save, a
+	    disconnect or a server crash can delay a stolen weapon but never duplicate or destroy it.
 	  * Locked workshops, new players (shield) and full backpacks cannot be stolen from/into.
 
 	Forge Lock: the owner presses the lock button; red lasers close the workshop for LOCK_SEC.
-	Anyone else inside is pushed out and nobody else can enter or start a steal. The lock can be
-	used again LOCK_COOLDOWN_SEC after it ends.
+	Anyone else inside is pushed out and nobody else can enter or start a steal; holds already in
+	progress are cancelled. The lock can be used again LOCK_COOLDOWN_SEC after it ends. Lock state
+	belongs to the workshop's current owner: it is cleared whenever a workshop changes hands.
 
 	`Logic` holds the pure rules so specs can run them without Studio. World geometry and
 	characters are supplied through WorkshopService.world (set by Net/Plots).
@@ -32,6 +38,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Economy = require(Shared:WaitForChild("Economy"))
 local ForgeMath = require(Shared:WaitForChild("ForgeMath"))
+local Steal = require(Shared:WaitForChild("Steal"))
 local Balance = require(Shared:WaitForChild("Config"):WaitForChild("Balance"))
 
 local WorkshopService = {}
@@ -40,8 +47,12 @@ WorkshopService.Logic = Logic
 
 Logic.LOCK_SEC = 30
 Logic.LOCK_COOLDOWN_SEC = 60
-Logic.STEAL_HOLD_SEC = 2.5
+-- Hold to steal: Steal.holdSeconds(value), 2..8 s. The server accepts a commit this much early
+-- (network latency) and up to HOLD_LATE_SEC late.
 Logic.STEAL_HOLD_TOLERANCE = 0.3
+Logic.HOLD_LATE_SEC = 5
+-- How close to the podium the thief must stay for the whole hold.
+Logic.HOLD_RANGE = 12
 Logic.CARRY_SEC = 40
 Logic.TAG_RANGE = 7
 Logic.STEAL_COOLDOWN_SEC = 20
@@ -49,6 +60,17 @@ Logic.SLOT_COOLDOWN_SEC = 90
 -- Players who have forged fewer weapons than this cannot be stolen from (new player shield).
 Logic.SHIELD_FORGES = 25
 Logic.CARRY_SPEED_MULT = 0.7
+-- Carry movement check (horizontal studs). A carrier walks at 28 * 0.7 = 19.6 studs/s. The
+-- allowance refills at MAX_CARRY_SPEED and can bank up to MOVE_BURST studs, so a lag spike that
+-- replicates about a second and a half of walking at once is fine, but a teleport is not.
+Logic.MAX_CARRY_SPEED = 30
+Logic.MOVE_BURST = 30
+Logic.MOVE_SLACK = 10
+-- A carry is never delivered sooner than this, even between neighbouring workshops, so there is
+-- always a moment to tag the thief.
+Logic.MIN_CARRY_SEC = 2
+-- Stolen-weapon ids a profile remembers so a re-sent delivery is never applied twice.
+Logic.LEDGER_SIZE = 1000
 
 WorkshopService.changed = Instance.new("BindableEvent") -- (kind, payload) for the world glue
 WorkshopService.notify = Instance.new("BindableEvent") -- (player, text, kind)
@@ -83,6 +105,33 @@ function Logic.shielded(profile: any): boolean
 	return (profile.weaponsForged or 0) < Logic.SHIELD_FORGES
 end
 
+-- Seconds of holding needed to steal `weapon` (shared with the client prompt).
+function Logic.holdSec(weapon: any): number
+	return Steal.holdSeconds(weapon and weapon.v)
+end
+
+-- Horizontal distance between two positions (falling or jumping never counts as travel).
+function Logic.flat(a: any, b: any): number
+	if typeof(a) == "Vector3" and typeof(b) == "Vector3" then
+		return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+	end
+	return (a - b).Magnitude
+end
+
+export type Move = { pos: any, at: number, budget: number }
+
+function Logic.newMove(pos: any, now: number): Move
+	return { pos = pos, at = now, budget = Logic.MOVE_BURST }
+end
+
+-- Records a new position sample. False when the carrier covered more ground than running allows.
+function Logic.moveOk(move: Move, pos: any, now: number): boolean
+	local dt = math.max(0, now - move.at)
+	move.budget = math.min(Logic.MOVE_BURST, move.budget + Logic.MAX_CARRY_SPEED * dt) - Logic.flat(pos, move.pos)
+	move.pos, move.at = pos, now
+	return move.budget >= -Logic.MOVE_SLACK
+end
+
 export type Carry = {
 	thief: any,
 	victim: any,
@@ -92,6 +141,7 @@ export type Carry = {
 	weapon: any,
 	startedAt: number,
 	deadline: number,
+	move: Move?,
 }
 
 --[[
@@ -128,32 +178,124 @@ function Logic.canSteal(thiefProfile: any, victimProfile: any, slot: any, lock: 
 	return true, weapon
 end
 
+-- True when podium `slot` still shows exactly the weapon pinned at the start of a hold.
+function Logic.sameWeapon(victimProfile: any, slot: number, weaponId: string, pinned: any): boolean
+	if victimProfile.showcase[slot] ~= weaponId then
+		return false
+	end
+	local weapon = victimProfile.weapons[weaponId]
+	return weapon ~= nil and weapon.v == pinned.v and weapon.ts == pinned.ts and weapon.m == pinned.m and weapon.r == pinned.r
+end
+
 --[[
-	Completes a delivered steal atomically: the weapon leaves the victim (backpack and podium)
-	and enters the thief's backpack under a fresh id. Returns (true, newWeapon) or (false, code)
-	when the weapon no longer exists in the victim's profile.
+	Steal ledger. Two profiles cannot be saved in one atomic write, so a delivered steal moves the
+	weapon in two durable steps:
+
+	  1. beginTransfer (victim): the weapon leaves the victim's backpack and podium and is parked
+	     in victim.outbox[id] with the thief's UserId. The victim's profile is saved and the save
+	     confirmed. Until then nothing has been given to the thief; if the save fails while the
+	     victim is still here, cancelTransfer puts the weapon back.
+	  2. receive (thief): the weapon is added to the thief's backpack and the transfer id is
+	     recorded in thief.xferIn in the same profile, so receiving the same id twice does nothing.
+	     Once the thief's save is confirmed (or the delivery was queued as a ProfileStore message
+	     to the thief's saved profile), ack removes the outbox entry.
+
+	Crash or disconnect at any point: a weapon is always either in the victim's saved backpack
+	(step 1 never saved), or in the victim's saved outbox (re-delivered when the victim's profile
+	next loads, and by a retry loop while it stays loaded), or in the thief's saved backpack with
+	its id in xferIn (any re-delivery is ignored). It is never in two backpacks and never in none.
 ]]
-function Logic.transfer(thiefProfile: any, victimProfile: any, carry: Carry, thiefName: string?, victimName: string?): (boolean, any)
+function Logic.beginTransfer(victimProfile: any, carry: Carry, transferId: string, toUserId: number, toName: string?, fromName: string?, now: number): (boolean, any)
 	local weapon = victimProfile.weapons[carry.weaponId]
-	if not weapon then
+	if not weapon or (carry.weapon and (weapon.v ~= carry.weapon.v or weapon.ts ~= carry.weapon.ts)) then
 		return false, "Gone"
 	end
-	if not Economy.hasRoom(thiefProfile) then
-		return false, "InventoryFull"
+	victimProfile.outbox = if type(victimProfile.outbox) == "table" then victimProfile.outbox else {}
+	if victimProfile.outbox[transferId] then
+		return false, "Duplicate"
 	end
 	victimProfile.weapons[carry.weaponId] = nil
 	local at = table.find(victimProfile.showcase, carry.weaponId)
 	if at then
 		victimProfile.showcase[at] = ""
 	end
-	local copy = table.clone(weapon)
+	local entry = { w = table.clone(weapon), to = toUserId, toName = toName, fromName = fromName, slot = at or carry.slot, at = now }
+	victimProfile.outbox[transferId] = entry
+	victimProfile.weaponsLost = (victimProfile.weaponsLost or 0) + 1
+	return true, entry
+end
+
+-- Undoes step 1 while the transfer has not been delivered. Returns the restored weapon or nil.
+function Logic.cancelTransfer(victimProfile: any, transferId: string): any?
+	local entry = type(victimProfile.outbox) == "table" and victimProfile.outbox[transferId]
+	if not entry then
+		return nil
+	end
+	victimProfile.outbox[transferId] = nil
+	local weapon = table.clone(entry.w)
+	if victimProfile.weapons[weapon.id] ~= nil then
+		weapon.id = Economy.nextWeaponId(victimProfile)
+	end
+	victimProfile.weapons[weapon.id] = weapon
+	local slot = entry.slot
+	if type(slot) == "number" and slot <= Economy.showcaseSlots(victimProfile) and victimProfile.showcase[slot] == "" then
+		victimProfile.showcase[slot] = weapon.id
+	end
+	victimProfile.weaponsLost = math.max(0, (victimProfile.weaponsLost or 0) - 1)
+	return weapon
+end
+
+-- Step 2: gives the thief the weapon once per transfer id. Returns (true, weapon) or
+-- (false, "Duplicate") when this id was already received. A full backpack never loses a
+-- delivered weapon: it may go over the limit until the player sells.
+function Logic.receive(thiefProfile: any, transferId: string, entry: any, now: number): (boolean, any)
+	thiefProfile.xferIn = if type(thiefProfile.xferIn) == "table" then thiefProfile.xferIn else {}
+	if thiefProfile.xferIn[transferId] then
+		return false, "Duplicate"
+	end
+	local copy = table.clone(entry.w)
 	copy.id = Economy.nextWeaponId(thiefProfile)
-	copy.sf = victimName -- "stolen from", shown on the weapon card
+	copy.sf = entry.fromName or copy.sf -- "stolen from", shown on the weapon card
+	copy.st = 1 -- stolen: its usable value follows the holder's progression (Economy.usableValue)
 	thiefProfile.weapons[copy.id] = copy
 	thiefProfile.weaponsStolen = (thiefProfile.weaponsStolen or 0) + 1
-	victimProfile.weaponsLost = (victimProfile.weaponsLost or 0) + 1
-	thiefProfile.highestWeaponValue = math.max(thiefProfile.highestWeaponValue or 0, copy.v)
+	thiefProfile.xferIn[transferId] = now
+	-- Keep the ledger bounded: forget the oldest ids first.
+	local count, oldestId, oldestAt = 0, nil, math.huge
+	for id, at in thiefProfile.xferIn do
+		count += 1
+		if at < oldestAt then
+			oldestId, oldestAt = id, at
+		end
+	end
+	if count > Logic.LEDGER_SIZE and oldestId then
+		thiefProfile.xferIn[oldestId] = nil
+	end
 	return true, copy
+end
+
+function Logic.ack(victimProfile: any, transferId: string)
+	if type(victimProfile.outbox) == "table" then
+		victimProfile.outbox[transferId] = nil
+	end
+end
+
+-- The whole transfer in one step (both profiles in memory, no saves): used by specs and tools.
+function Logic.transfer(thiefProfile: any, victimProfile: any, carry: Carry, thiefName: string?, victimName: string?): (boolean, any)
+	if not victimProfile.weapons[carry.weaponId] then
+		return false, "Gone"
+	end
+	if not Economy.hasRoom(thiefProfile) then
+		return false, "InventoryFull"
+	end
+	local id = "local-" .. tostring(carry.weaponId) .. "-" .. tostring(thiefProfile.nextWeaponId)
+	local ok, entry = Logic.beginTransfer(victimProfile, carry, id, 0, thiefName, victimName, 0)
+	if not ok then
+		return false, entry
+	end
+	local received, copy = Logic.receive(thiefProfile, id, entry, 0)
+	Logic.ack(victimProfile, id)
+	return received, copy
 end
 
 --------------------------------------------------------------------------------
@@ -165,7 +307,23 @@ local deps: any = {
 		return nil
 	end,
 	markDirty = function(_player: any) end,
-	saveNow = function(_player: any) end,
+	-- Saves and waits for the save to be confirmed. Returns true only when it was.
+	saveNow = function(_player: any): boolean
+		return false
+	end,
+	-- Queues a message to a player's saved profile (ProfileStore:MessageAsync). Returns success.
+	sendMessage = function(_userId: number, _message: any): boolean
+		return false
+	end,
+	playerByUserId = function(userId: number): any
+		return Players:GetPlayerByUserId(userId)
+	end,
+	newId = function(): string
+		return game:GetService("HttpService"):GenerateGUID(false)
+	end,
+	spawn = function(fn: (...any) -> (), ...: any)
+		task.spawn(fn, ...)
+	end,
 	now = function(): number
 		return workspace:GetServerTimeNow()
 	end,
@@ -213,11 +371,14 @@ WorkshopService.world = {
 	eject = function(_plot: number, _character: Model) end,
 } :: any
 
+type Intent = { plot: number, slot: number, victim: any, weaponId: string, weapon: any, at: number, holdSec: number }
+
 local locks: { [number]: LockState } = {}
 local carries: { [any]: Carry } = {} -- thief -> carry
-local stealIntent: { [any]: { plot: number, slot: number, at: number } } = {}
+local stealIntent: { [any]: Intent } = {}
 local lastSteal: { [any]: number } = {}
 local slotCooldown: { [string]: number } = {} -- "victimUserId:slot" -> until
+local inFlight: { [string]: boolean } = {} -- transfer ids being saved/delivered right now
 
 local function lockOf(plot: number): LockState
 	local lock = locks[plot]
@@ -239,6 +400,12 @@ local function near(player: any, position: Vector3?, range: number): boolean
 end
 WorkshopService.near = near
 
+local function alive(player: any): boolean
+	local character = player and player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	return humanoid ~= nil and humanoid.Health > 0 and rootPart(player) ~= nil
+end
+
 -- Ids of weapons currently being carried away from `victim`.
 function WorkshopService.carriedFrom(victim: any): { [string]: boolean }
 	local ids = {}
@@ -252,6 +419,10 @@ end
 
 function WorkshopService.carryOf(thief: any): Carry?
 	return carries[thief]
+end
+
+function WorkshopService.intentOf(thief: any): Intent?
+	return stealIntent[thief]
 end
 
 function WorkshopService.lockState(plot: number): LockState
@@ -280,6 +451,10 @@ local function setCarryVisual(thief: any, carry: Carry?)
 	end
 end
 
+local function userIdOf(player: any): number
+	return if player then (player.UserId or 0) else 0
+end
+
 local function endCarry(thief: any, outcome: string)
 	local carry = carries[thief]
 	if not carry then
@@ -288,27 +463,36 @@ local function endCarry(thief: any, outcome: string)
 	carries[thief] = nil
 	setCarryVisual(thief, nil)
 	WorkshopService.changed:Fire("carry", { thief = thief, victim = carry.victim, slot = carry.slot, outcome = outcome })
-	local victimName = if typeof(carry.victim) == "Instance" then carry.victim.DisplayName else "the owner"
-	local thiefName = if typeof(thief) == "Instance" then thief.DisplayName else "A thief"
+	local victimName = if carry.victim then carry.victim.DisplayName else "the owner"
+	local thiefName = if thief then thief.DisplayName else "A thief"
 	if outcome == "Returned" then
 		WorkshopService.notify:Fire(thief, "Caught! The weapon went back to " .. victimName, "bad")
 		WorkshopService.notify:Fire(carry.victim, "You got your weapon back!", "good")
 	elseif outcome == "Timeout" or outcome == "ThiefLost" then
 		WorkshopService.notify:Fire(thief, "Too slow! The weapon flew back home", "bad")
 		WorkshopService.notify:Fire(carry.victim, "Your weapon came back home", "good")
+	elseif outcome == "Invalid" then
+		WorkshopService.notify:Fire(thief, "The weapon slipped away and flew back home", "bad")
+		WorkshopService.notify:Fire(carry.victim, "Your weapon came back home", "good")
 	elseif outcome == "Stolen" then
 		WorkshopService.notify:Fire(carry.victim, thiefName .. " stole your weapon! Lock your forge to stay safe", "bad")
 	end
-	slotCooldown[tostring(if typeof(carry.victim) == "Instance" then carry.victim.UserId else 0) .. ":" .. carry.slot] = deps.now() + Logic.SLOT_COOLDOWN_SEC
-	if typeof(thief) == "Instance" then
-		deps.markDirty(thief)
-	end
-	if typeof(carry.victim) == "Instance" then
-		deps.markDirty(carry.victim)
+	slotCooldown[tostring(userIdOf(carry.victim)) .. ":" .. carry.slot] = deps.now() + Logic.SLOT_COOLDOWN_SEC
+	deps.markDirty(thief)
+	deps.markDirty(carry.victim)
+end
+
+local function cancelIntent(thief: any, text: string?)
+	if stealIntent[thief] then
+		stealIntent[thief] = nil
+		if text then
+			WorkshopService.notify:Fire(thief, text, "bad")
+		end
 	end
 end
 
--- The thief started holding the steal prompt on `plot` podium `slot`.
+-- The thief started holding the steal prompt on `plot` podium `slot`. Pins the exact weapon and
+-- returns the hold time the server will enforce.
 function WorkshopService.stealBegin(thief: any, plot: any, slot: any): (boolean, any)
 	if type(plot) ~= "number" or type(slot) ~= "number" then
 		return false, "InvalidSlot"
@@ -328,23 +512,33 @@ function WorkshopService.stealBegin(thief: any, plot: any, slot: any): (boolean,
 	if lastSteal[thief] and now - lastSteal[thief] < Logic.STEAL_COOLDOWN_SEC then
 		return false, "StealCooldown"
 	end
-	if not near(thief, WorkshopService.world.podiumPosition(plot, slot), 12) then
+	if not near(thief, WorkshopService.world.podiumPosition(plot, slot), Logic.HOLD_RANGE) then
 		return false, "TooFar"
 	end
 	local thiefProfile, victimProfile = deps.getProfile(thief), deps.getProfile(victim)
 	if not thiefProfile or not victimProfile then
 		return false, "NotLoaded"
 	end
-	local ok, err = Logic.canSteal(thiefProfile, victimProfile, slot, lockOf(plot), now, WorkshopService.carriedFrom(victim), slotCooldown[victim.UserId .. ":" .. slot])
+	local ok, weapon = Logic.canSteal(thiefProfile, victimProfile, slot, lockOf(plot), now, WorkshopService.carriedFrom(victim), slotCooldown[userIdOf(victim) .. ":" .. slot])
 	if not ok then
-		return false, err
+		return false, weapon
 	end
-	stealIntent[thief] = { plot = plot, slot = slot, at = now }
-	WorkshopService.notify:Fire(victim, thief.DisplayName .. " is stealing from your workshop!", "bad")
-	return true, nil
+	local holdSec = Logic.holdSec(weapon)
+	stealIntent[thief] = {
+		plot = plot,
+		slot = slot,
+		victim = victim,
+		weaponId = victimProfile.showcase[slot],
+		weapon = table.clone(weapon),
+		at = now,
+		holdSec = holdSec,
+	}
+	WorkshopService.notify:Fire(victim, string.format("%s is stealing your %s! Lock your forge or chase them!", thief.DisplayName, ForgeMath.weaponName(weapon)), "bad")
+	return true, { holdSec = holdSec }
 end
 
--- The thief finished holding the prompt. Starts the carry if everything still holds.
+-- The thief finished holding the prompt. Starts the carry only if the very same weapon is still
+-- there and everything else still holds.
 function WorkshopService.stealCommit(thief: any, plot: any, slot: any): (boolean, any)
 	local intent = stealIntent[thief]
 	stealIntent[thief] = nil
@@ -352,37 +546,42 @@ function WorkshopService.stealCommit(thief: any, plot: any, slot: any): (boolean
 		return false, "NoIntent"
 	end
 	local now = deps.now()
-	if now - intent.at < Logic.STEAL_HOLD_SEC - Logic.STEAL_HOLD_TOLERANCE then
+	if now - intent.at < intent.holdSec - Logic.STEAL_HOLD_TOLERANCE then
 		return false, "TooFast"
 	end
-	if now - intent.at > Logic.STEAL_HOLD_SEC + 5 then
+	if now - intent.at > intent.holdSec + Logic.HOLD_LATE_SEC then
 		return false, "TooSlow"
 	end
 	local victim = WorkshopService.world.ownerOf(plot)
-	if not victim or victim == thief or carries[thief] then
-		return false, "OwnWeapon"
+	if not victim or victim ~= intent.victim or victim == thief or carries[thief] then
+		return false, "Moved"
 	end
-	if not near(thief, WorkshopService.world.podiumPosition(plot, slot), 12) then
+	if not alive(thief) or not near(thief, WorkshopService.world.podiumPosition(plot, slot), Logic.HOLD_RANGE) then
 		return false, "TooFar"
 	end
 	local thiefProfile, victimProfile = deps.getProfile(thief), deps.getProfile(victim)
 	if not thiefProfile or not victimProfile then
 		return false, "NotLoaded"
 	end
-	local ok, weapon = Logic.canSteal(thiefProfile, victimProfile, slot, lockOf(plot), now, WorkshopService.carriedFrom(victim), slotCooldown[victim.UserId .. ":" .. slot])
+	local ok, weapon = Logic.canSteal(thiefProfile, victimProfile, slot, lockOf(plot), now, WorkshopService.carriedFrom(victim), slotCooldown[userIdOf(victim) .. ":" .. slot])
 	if not ok then
 		return false, weapon
 	end
+	if not Logic.sameWeapon(victimProfile, slot, intent.weaponId, intent.weapon) then
+		return false, "Moved"
+	end
 	lastSteal[thief] = now
+	local root = rootPart(thief)
 	local carry: Carry = {
 		thief = thief,
 		victim = victim,
 		victimPlot = plot,
 		slot = slot,
-		weaponId = victimProfile.showcase[slot],
+		weaponId = intent.weaponId,
 		weapon = table.clone(weapon),
 		startedAt = now,
 		deadline = now + Logic.CARRY_SEC,
+		move = if root then Logic.newMove(root.Position, now) else nil,
 	}
 	carries[thief] = carry
 	setCarryVisual(thief, carry)
@@ -396,7 +595,81 @@ function WorkshopService.stealCancel(thief: any)
 	stealIntent[thief] = nil
 end
 
--- One pass of carry resolution: delivery, tags, timeouts. Called by the heartbeat loop.
+-- Cancels holds that can no longer succeed: the thief walked off or died, the workshop changed
+-- hands or locked, or the pinned weapon moved. Called by the heartbeat loop.
+function WorkshopService.stepIntents()
+	local now = deps.now()
+	for thief, intent in stealIntent do
+		if thief.Parent ~= Players or not alive(thief) then
+			stealIntent[thief] = nil
+		elseif not near(thief, WorkshopService.world.podiumPosition(intent.plot, intent.slot), Logic.HOLD_RANGE) then
+			cancelIntent(thief, "You let go of the podium")
+		elseif WorkshopService.world.ownerOf(intent.plot) ~= intent.victim or Logic.isLocked(lockOf(intent.plot), now) then
+			cancelIntent(thief, "The forge locked!")
+		else
+			local victimProfile = deps.getProfile(intent.victim)
+			if not victimProfile or not Logic.sameWeapon(victimProfile, intent.slot, intent.weaponId, intent.weapon) then
+				cancelIntent(thief, "The weapon was moved!")
+			elseif now - intent.at > intent.holdSec + Logic.HOLD_LATE_SEC then
+				stealIntent[thief] = nil
+			end
+		end
+	end
+end
+
+-- Delivers one outbox entry of `victimData` to its thief (step 2 of the steal ledger). Safe to
+-- call repeatedly: the thief's ledger ignores ids it already received.
+local function deliver(victimData: any, transferId: string)
+	local entry = type(victimData.outbox) == "table" and victimData.outbox[transferId]
+	if not entry or inFlight[transferId] then
+		return
+	end
+	inFlight[transferId] = true
+	local ok, err = pcall(function()
+		local thief = deps.playerByUserId(entry.to)
+		local thiefData = thief and deps.getProfile(thief)
+		if thiefData then
+			local received, copy = Logic.receive(thiefData, transferId, entry, deps.now())
+			if received then
+				WorkshopService.notify:Fire(thief, "Stolen! " .. ForgeMath.weaponName(copy) .. " is in your backpack", "good")
+				deps.markDirty(thief)
+			end
+			if deps.saveNow(thief) then
+				Logic.ack(victimData, transferId)
+			end
+			-- An unconfirmed save keeps the outbox entry; the retry re-delivers and the ledger
+			-- drops the duplicate.
+		elseif deps.sendMessage(entry.to, { kind = "steal", id = transferId, w = entry.w, from = entry.fromName }) then
+			Logic.ack(victimData, transferId)
+		end
+	end)
+	inFlight[transferId] = nil
+	if not ok then
+		warn("[WorkshopService] deliver", err)
+	end
+end
+WorkshopService._deliver = deliver
+
+-- Step 1 then step 2 of a delivered steal (runs in its own thread: saves yield).
+local function finishTransfer(thief: any, victim: any, victimData: any, transferId: string)
+	inFlight[transferId] = true
+	local ok, saved = pcall(deps.saveNow, victim)
+	inFlight[transferId] = nil
+	if not (ok and saved) then
+		if deps.getProfile(victim) == victimData and type(victimData.outbox) == "table" and victimData.outbox[transferId] then
+			Logic.cancelTransfer(victimData, transferId)
+			deps.markDirty(victim)
+			WorkshopService.notify:Fire(thief, "The steal couldn't be saved, so the weapon went back home", "bad")
+		end
+		-- Otherwise the victim already left: whatever their final save holds wins. A saved outbox
+		-- entry is delivered when they next join; if it never saved they still have the weapon.
+		return
+	end
+	deliver(victimData, transferId)
+end
+
+-- One pass of carry resolution: delivery, tags, teleport checks, timeouts. Called by the
+-- heartbeat loop.
 function WorkshopService.stepCarries()
 	local now = deps.now()
 	for thief, carry in carries do
@@ -415,6 +688,12 @@ function WorkshopService.stepCarries()
 			endCarry(thief, "ThiefLost")
 			continue
 		end
+		if carry.move == nil then
+			carry.move = Logic.newMove(thiefRoot.Position, now)
+		elseif not Logic.moveOk(carry.move :: Move, thiefRoot.Position, now) then
+			endCarry(thief, "Invalid")
+			continue
+		end
 		if victimRoot and (victimRoot.Position - thiefRoot.Position).Magnitude <= Logic.TAG_RANGE then
 			endCarry(thief, "Returned")
 			continue
@@ -424,23 +703,61 @@ function WorkshopService.stepCarries()
 			continue
 		end
 		local home = WorkshopService.world.plotOf(thief)
-		if home > 0 and WorkshopService.world.inPlot(home, thiefRoot.Position) then
+		if home > 0 and now - carry.startedAt >= Logic.MIN_CARRY_SEC and WorkshopService.world.inPlot(home, thiefRoot.Position) then
 			local thiefProfile, victimProfile = deps.getProfile(thief), deps.getProfile(victim)
-			if thiefProfile and victimProfile then
-				local ok, copy = Logic.transfer(thiefProfile, victimProfile, carry, thief.DisplayName, victim.DisplayName)
-				if ok then
-					WorkshopService.notify:Fire(thief, "Stolen! " .. ForgeMath.weaponName(copy) .. " is in your backpack", "good")
-					endCarry(thief, "Stolen")
-					task.spawn(deps.saveNow, thief)
-					task.spawn(deps.saveNow, victim)
-				else
-					endCarry(thief, "Gone")
-				end
-			else
+			if not thiefProfile or not victimProfile then
 				endCarry(thief, "ThiefLost")
+				continue
 			end
+			local transferId = deps.newId()
+			local ok = Logic.beginTransfer(victimProfile, carry, transferId, userIdOf(thief), thief.DisplayName, victim.DisplayName, now)
+			if not ok then
+				endCarry(thief, "Gone")
+				continue
+			end
+			endCarry(thief, "Stolen")
+			WorkshopService.notify:Fire(thief, "Got it! Locking it in your backpack...", "good")
+			inFlight[transferId] = true
+			deps.spawn(finishTransfer, thief, victim, victimProfile, transferId)
 		end
 	end
+end
+
+-- Re-delivers every outbox entry of a loaded player (after a failed save, a crash or a rejoin).
+function WorkshopService.retryOutbox(player: any)
+	local data = deps.getProfile(player)
+	if not data or type(data.outbox) ~= "table" then
+		return
+	end
+	for transferId in data.outbox do
+		if not inFlight[transferId] then
+			deps.spawn(deliver, data, transferId)
+		end
+	end
+end
+
+-- A delivery queued to this player's saved profile while they were elsewhere.
+function WorkshopService.onMessage(player: any, data: any, message: any): boolean
+	if type(message) ~= "table" or message.kind ~= "steal" or type(message.id) ~= "string" or type(message.w) ~= "table" then
+		return false
+	end
+	local received, copy = Logic.receive(data, message.id, { w = message.w, fromName = message.from }, deps.now())
+	if received then
+		WorkshopService.notify:Fire(player, "You kept your loot: " .. ForgeMath.weaponName(copy), "good")
+		deps.markDirty(player)
+	end
+	return true
+end
+
+-- Clears a workshop's lock, cooldown and holds when it changes hands (owner left or joined).
+function WorkshopService.resetPlot(plot: number)
+	locks[plot] = nil
+	for thief, intent in stealIntent do
+		if intent.plot == plot then
+			cancelIntent(thief, "That workshop's owner left")
+		end
+	end
+	publishLock(plot)
 end
 
 -- Owner presses the lock button in their workshop.
@@ -455,6 +772,11 @@ function WorkshopService.lockForge(player: any): (boolean, any)
 	local ok, result = Logic.lock(lockOf(plot), deps.now())
 	if ok then
 		publishLock(plot)
+		for thief, intent in stealIntent do
+			if intent.plot == plot then
+				cancelIntent(thief, "The forge locked!")
+			end
+		end
 	end
 	return ok, result
 end
@@ -470,6 +792,11 @@ function WorkshopService.enforceLocks()
 					local root = rootPart(other)
 					if root and WorkshopService.world.inPlot(plot, root.Position) then
 						WorkshopService.world.eject(plot, other.Character)
+						-- A server teleport is not the carrier's own movement.
+						local carry = carries[other]
+						if carry then
+							carry.move = nil
+						end
 						local left = math.ceil(lock.lockedUntil - now)
 						WorkshopService.notify:Fire(other, string.format("Locked! %s's forge opens in %ds", if owner then owner.DisplayName else "This", left), "bad")
 					end
@@ -571,6 +898,7 @@ function WorkshopService._reset()
 	table.clear(stealIntent)
 	table.clear(lastSteal)
 	table.clear(slotCooldown)
+	table.clear(inFlight)
 end
 
 function WorkshopService.init()
@@ -582,8 +910,13 @@ function WorkshopService.init()
 		DataService.markDirty(player)
 	end
 	deps.saveNow = function(player)
-		pcall(DataService.saveNow, player, 15)
+		local ok, saved = pcall(DataService.saveNow, player, 15)
+		return ok and saved == true
 	end
+	deps.sendMessage = function(userId, message)
+		return DataService.sendMessage(userId, message)
+	end
+	DataService.registerMessageHandler("steal", WorkshopService.onMessage)
 	deps.owns = function(player, key)
 		local found = script.Parent:FindFirstChild("MonetizationService")
 		if not found then
@@ -606,6 +939,8 @@ function WorkshopService.init()
 		if gap > 0 then
 			WorkshopService.settleOffline(player, gap)
 		end
+		-- Weapons stolen from this player that were never confirmed delivered.
+		WorkshopService.retryOutbox(player)
 	end)
 end
 
@@ -621,10 +956,15 @@ function WorkshopService.start()
 		end
 		stealIntent[player] = nil
 		lastSteal[player] = nil
+		for thief, intent in stealIntent do
+			if intent.victim == player then
+				stealIntent[thief] = nil
+			end
+		end
 	end)
 	task.spawn(function()
 		local last = os.clock()
-		local acc = 0
+		local acc, retryAcc = 0, 0
 		while true do
 			task.wait(0.2)
 			local now = os.clock()
@@ -634,9 +974,20 @@ function WorkshopService.start()
 			if not ok then
 				warn("[WorkshopService] carries", err)
 			end
+			ok, err = pcall(WorkshopService.stepIntents)
+			if not ok then
+				warn("[WorkshopService] holds", err)
+			end
 			ok, err = pcall(WorkshopService.enforceLocks)
 			if not ok then
 				warn("[WorkshopService] locks", err)
+			end
+			retryAcc += dt
+			if retryAcc >= 30 then
+				retryAcc = 0
+				for _, player in Players:GetPlayers() do
+					pcall(WorkshopService.retryOutbox, player)
+				end
 			end
 			acc += dt
 			if acc >= 1 then

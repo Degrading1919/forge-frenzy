@@ -9,6 +9,16 @@
 	  premium  premium Auto Forge (4x), Multi-Forge, VIP + Titan passes (Robux-free simulation)
 	  manual   a free player who hammers manually at 2.5x luck on one forge (others on free auto)
 
+	Stealing stress tests (free auto plus a steal on a fixed schedule; worst case: every steal
+	lands a top-roll Mythic Primordium greatsword from a rank-13 player, the best weapon in the
+	game, which is then displayed or sold for whatever it is worth to the thief):
+	  steal2m          one such steal every 2 minutes, for the whole run (with the value cap)
+	  steal15m         one every 15 minutes (with the value cap)
+	  steal2m-uncapped every 2 minutes, with weapons selling at full value (before this fix)
+	  evolve-sell      free auto, but after each evolution sells every kept weapon at once
+	  evolve-sell-uncapped  the same, with weapons selling at full value (before this fix)
+	  free-uncapped    plain free auto with weapons selling at full value (before this fix)
+
 	The simulated player is attentive: every few seconds it buys the next material when it can,
 	builds pads and machine upgrades that cost a small share of the next material, hatches and
 	merges pets, re-picks forge recipes to match ingot supply, displays its best weapons,
@@ -42,8 +52,21 @@ local SCENARIOS = {
 	free = { luck = 1.5, mode = "free", rolls = 1, passes = {} },
 	premium = { luck = 4, mode = "premium", rolls = 2, passes = { "VIPWorkshop", "TitanExcavator", "DragonFurnace" } },
 	manual = { luck = 1.5, manualLuck = 2.5, mode = "free", rolls = 1, passes = {} },
+	steal2m = { luck = 1.5, mode = "free", rolls = 1, passes = {}, stealEvery = 120, capped = true },
+	steal15m = { luck = 1.5, mode = "free", rolls = 1, passes = {}, stealEvery = 900, capped = true },
+	["steal2m-uncapped"] = { luck = 1.5, mode = "free", rolls = 1, passes = {}, stealEvery = 120, capped = false, uncapped = true },
+	["evolve-sell"] = { luck = 1.5, mode = "free", rolls = 1, passes = {}, sellOnEvolve = true },
+	["free-uncapped"] = { luck = 1.5, mode = "free", rolls = 1, passes = {}, uncapped = true },
+	["evolve-sell-uncapped"] = { luck = 1.5, mode = "free", rolls = 1, passes = {}, sellOnEvolve = true, uncapped = true },
 }
 local scenario = assert(SCENARIOS[scenarioName], "unknown scenario " .. scenarioName)
+
+if scenario.uncapped then
+	-- Reproduces the economy before the usable-value rule: every weapon sells for its full value.
+	Economy.usableValue = function(_p, weapon)
+		return weapon.v
+	end
+end
 
 local p = Economy.newProfile()
 Pets.ensure(p)
@@ -179,9 +202,10 @@ local function buyThings()
 end
 
 local function manageDisplays()
+	-- Show the weapons that earn the most on a podium for this player.
 	local list = {}
 	for id, w in p.weapons do
-		table.insert(list, { id = id, v = w.v })
+		table.insert(list, { id = id, v = Economy.displayIncome(p, w, cashMult()) })
 	end
 	table.sort(list, function(a, b)
 		return a.v > b.v
@@ -191,7 +215,7 @@ local function manageDisplays()
 		p.showcase[slot] = if slot <= slots and list[slot] then list[slot].id else ""
 	end
 	-- Walk to the booth and sell everything that is not on display.
-	Economy.sellAll(p, nil)
+	Economy.sellAll(p, nil, nil, cashMult())
 	Economy.collectBank(p)
 end
 
@@ -201,6 +225,12 @@ local function tryEvolve()
 		local ok = Evolution.evolve(p, false, now)
 		if ok then
 			table.insert(evolutions, { t = now, rank = rank + 1 })
+			if scenario.sellOnEvolve then
+				for slot = 1, #p.showcase do
+					p.showcase[slot] = ""
+				end
+				Economy.sellAll(p, nil, nil, cashMult())
+			end
 		end
 	end
 end
@@ -210,6 +240,9 @@ end
 -- chunk. Bonuses and rates are refreshed every few seconds (they only change on purchases).
 local DT = 5
 local nextDecision, nextDisplay, nextRecipe = 0, 0, 0
+local nextSteal = scenario.stealEvery or math.huge
+local steals, stealCash = 0, 0
+local stealRng = { NextNumber = function() return 0.999 end }
 local forges = 0
 local snapshots = {}
 local SNAP_HOURS = { 0.0167, 0.05, 0.1667, 0.5, 1, 2, 5, 10, 25, 50, 100, 200, 300, 400, 500, 600, 800, 1000 }
@@ -261,6 +294,18 @@ while now < limit and p.unlockedTier < 32 do
 		end
 		nextDecision = now + 10
 	end
+	if now >= nextSteal then
+		nextSteal = now + scenario.stealEvery
+		local w = ForgeMath.rollWeapon(stealRng :: any, 32, 2, 5, { id = "", ts = now, mult = EvolutionCfg.cashMultiplier(13) })
+		w.id = Economy.nextWeaponId(p)
+		if scenario.capped then
+			w.st = 1
+		end
+		p.weapons[w.id] = w
+		steals += 1
+		stealCash += Economy.usableValue(p, w, mult)
+		nextDisplay = now -- display it or sell it straight away
+	end
 	if now >= nextDisplay then
 		manageDisplays()
 		nextDisplay = now + 120
@@ -291,6 +336,9 @@ local function hm(t)
 	return string.format("%.1fh", t / 3600)
 end
 
+if steals > 0 then
+	print(string.format("steals=%d, usable value when taken: %s total", steals, ForgeMath.formatCoins(stealCash)))
+end
 print(string.format("scenario=%s seed=%d reached tier %d (best %d) after %s, rank %d", scenarioName, seed, p.unlockedTier, p.highestTierEver or 1, hm(now), p.evolutionRank))
 print("first time each material was bought (cumulative):")
 local line = {}

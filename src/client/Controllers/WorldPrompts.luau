@@ -22,6 +22,12 @@ local Net = require(Common.Client.Net)
 
 local WorldPrompts = { Priority = 0 }
 
+-- Shared hold-time rule (the server enforces the same one).
+local function holdFor(value: number): number
+	local Steal = Common.shared({ "Steal" })
+	return if Steal then Steal.holdSeconds(value) else 2
+end
+
 local made: { [Instance]: ProximityPrompt } = {}
 local touchHooked: { [Instance]: boolean } = {}
 local lastTouch: { [string]: number } = {}
@@ -194,10 +200,11 @@ local function buildSteal()
 							if not ok and res then
 								Toast.show(tostring(res), "bad")
 							end
-						end, { hold = 2.5, range = 9 })
+						end, { hold = 2, range = 9 })
 						if p then
 							p.Enabled = false -- shown only while that podium has a weapon
 							p.PromptButtonHoldBegan:Connect(function()
+								p:SetAttribute("Holding", true)
 								local ok, res = Net.call("StealBegin", index, slot)
 								if not ok then
 									if res then Toast.show(tostring(res), "bad") end
@@ -208,6 +215,7 @@ local function buildSteal()
 								end
 							end)
 							p.PromptButtonHoldEnded:Connect(function()
+								p:SetAttribute("Holding", nil)
 								Net.call("StealCancel")
 							end)
 						end
@@ -248,7 +256,16 @@ local function updateSteal()
 						local entry = decoded and decoded.slots and decoded.slots[slot]
 						local has = type(entry) == "table" and not entry.gone
 						p.Enabled = owned and not locked and has and not carrying and not (decoded and decoded.shield)
-						p.ObjectText = if type(entry) == "table" then ("Worth " .. Theme.money(entry.v)) else ""
+						if type(entry) == "table" then
+							local hold = tonumber(entry.h) or holdFor(entry.v)
+							-- Never change the hold time while it is being held.
+							if not p:GetAttribute("Holding") then
+								p.HoldDuration = hold
+							end
+							p.ObjectText = string.format("Worth %s · hold %ss", Theme.money(entry.v), tostring(hold))
+						else
+							p.ObjectText = ""
+						end
 					end
 				end
 			end

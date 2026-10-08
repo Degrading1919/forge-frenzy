@@ -630,8 +630,37 @@ function Economy.completeForgeBatch(p: Profile, materialIndex: number, classInde
 	return true, { results = results }
 end
 
+--[[
+	What a weapon is worth to the player holding it right now (selling and display income).
+
+	A weapon in a metal the player has unlocked, that they forged themselves, is worth its full
+	value. Two kinds of weapon are worth only what the same weapon (type, rarity, craftsmanship,
+	trait) would be in the best metal the player has now, at the player's own evolution bonus:
+	  * a weapon above the player's current metals: an old trophy kept through an evolution, or a
+	    weapon stolen from a more advanced player;
+	  * any stolen weapon (`st`), so another player's evolution bonus never transfers.
+	The weapon keeps its identity and its full value on its card, and that value comes back as
+	the player reaches its metal again. This stops cashing out high-tier weapons (stolen, or kept
+	through evolution) from skipping hundreds of hours of the climb, while stealing a great weapon
+	still pays well. (Display income has its own, older cap: see displayIncome.)
+]]
+function Economy.usableValue(p: Profile, weapon: Weapon, mult: number?): number
+	local value = weapon.v
+	local unlocked = p.unlockedTier or 1
+	if weapon.st or (weapon.m or 1) > unlocked then
+		local tier = math.clamp(math.min(weapon.m or 1, unlocked), 1, Economy.MATERIAL_COUNT)
+		local rarity = math.clamp(tonumber(weapon.r) or 1, 1, 6)
+		local quality = math.clamp(tonumber(weapon.q) or 1, 1, #Balance.forge.craftsmanship.valueBandOffsets)
+		local class = if ForgeMath.isValidClass(weapon.c) then weapon.c else 1
+		local cap = ForgeMath.valueFor(tier, rarity, quality, weapon.t ~= nil, 0, class, mult)
+		value = math.min(value, cap)
+	end
+	return value
+end
+
 -- Sells kept weapons by id. Unknown, duplicate, displayed and `protected` ids are skipped.
-function Economy.sellWeapons(p: Profile, ids: any, protected: { [string]: boolean }?): (boolean, any)
+-- Each weapon pays its usable value (see usableValue) at the seller's cash multiplier `mult`.
+function Economy.sellWeapons(p: Profile, ids: any, protected: { [string]: boolean }?, mult: number?): (boolean, any)
 	if type(ids) ~= "table" or #ids == 0 or #ids > Balance.inventory.maxSellBatch then
 		return false, "InvalidRequest"
 	end
@@ -640,7 +669,7 @@ function Economy.sellWeapons(p: Profile, ids: any, protected: { [string]: boolea
 		local weapon = if type(id) == "string" then p.weapons[id] else nil
 		if weapon and not table.find(p.showcase, id) and not (protected and protected[id]) then
 			p.weapons[id] = nil
-			coins += weapon.v
+			coins += Economy.usableValue(p, weapon, mult)
 			p.weaponsSold += 1
 			table.insert(sold, id)
 		end
@@ -667,13 +696,13 @@ function Economy.sellableIds(p: Profile, keepFrom: number?): { string }
 	return ids
 end
 
-function Economy.sellAll(p: Profile, keepFrom: any, protected: { [string]: boolean }?): (boolean, any)
+function Economy.sellAll(p: Profile, keepFrom: any, protected: { [string]: boolean }?, mult: number?): (boolean, any)
 	local threshold = if type(keepFrom) == "number" and keepFrom >= 1 and keepFrom <= 7 then math.floor(keepFrom) else nil
 	local ids = Economy.sellableIds(p, threshold)
 	if #ids == 0 then
 		return false, "NothingSold"
 	end
-	return Economy.sellWeapons(p, ids, protected)
+	return Economy.sellWeapons(p, ids, protected, mult)
 end
 
 -- Places a kept weapon on podium `slot`, or clears it when id is nil/"". A weapon stands on at
@@ -721,7 +750,8 @@ end
 
 -- What one displayed weapon earns per second (see Balance.display).
 function Economy.displayIncome(p: Profile, weapon: Weapon, mult: number?): number
-	local value = weapon.v
+	-- A stolen weapon earns on its usable value; any weapon is then capped at the current tier.
+	local value = if weapon.st then Economy.usableValue(p, weapon, mult) else weapon.v
 	if Balance.display.capToCurrentTier then
 		value = math.min(value, ForgeMath.maxValue(p.unlockedTier, mult))
 	end

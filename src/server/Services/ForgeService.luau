@@ -523,12 +523,12 @@ function ForgeService.status(player: Player): { [number]: any }
 end
 
 -- Sells kept weapons by id (displayed ones are skipped). Returns { sold = {id}, coins }.
-function ForgeService.sellWeapons(player: Player, ids: any, protected: { [string]: boolean }?): (boolean, any)
+function ForgeService.sellWeapons(player: Player, ids: any, protected: { [string]: boolean }?, mult: number?): (boolean, any)
 	local data = DataService.get(player)
 	if not data then
 		return false, "NotLoaded"
 	end
-	local ok, result = Economy.sellWeapons(data, ids, protected)
+	local ok, result = Economy.sellWeapons(data, ids, protected, mult or cashMultiplier(player))
 	if ok then
 		DataService.markDirty(player)
 	end
@@ -536,12 +536,12 @@ function ForgeService.sellWeapons(player: Player, ids: any, protected: { [string
 end
 
 -- Sells every backpack weapon below `keepFrom` (nil = all) except displayed ones.
-function ForgeService.sellAll(player: Player, keepFrom: any, protected: { [string]: boolean }?): (boolean, any)
+function ForgeService.sellAll(player: Player, keepFrom: any, protected: { [string]: boolean }?, mult: number?): (boolean, any)
 	local data = DataService.get(player)
 	if not data then
 		return false, "NotLoaded"
 	end
-	local ok, result = Economy.sellAll(data, keepFrom, protected)
+	local ok, result = Economy.sellAll(data, keepFrom, protected, mult or cashMultiplier(player))
 	if ok then
 		DataService.markDirty(player)
 	end

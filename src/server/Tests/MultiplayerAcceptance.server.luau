@@ -52,7 +52,7 @@ local function waitUntil(predicate, seconds, label)
 	until false
 end
 -- A failed startup must still terminate the remote test instead of hanging Studio.
-task.delay(150, function() finish(false, "Acceptance watchdog timed out") end)
+task.delay(240, function() finish(false, "Acceptance watchdog timed out") end)
 
 local passed, err = pcall(function()
 	local root = script.Parent.Parent
@@ -102,6 +102,23 @@ local passed, err = pcall(function()
 	end
 	local function at(inst)
 		return if inst:IsA("Model") then inst:GetPivot() else inst.CFrame
+	end
+	-- Moves a character like a running carrier (about 20 studs/s in 4-stud steps), so the
+	-- server's carry movement check sees ordinary travel rather than a teleport.
+	local function walkTo(player, cf)
+		local root = player.Character.HumanoidRootPart
+		local target = cf.Position + Vector3.new(0, 3, 0)
+		for _ = 1, 400 do
+			local offset = target - root.Position
+			local flat = Vector3.new(offset.X, 0, offset.Z)
+			if flat.Magnitude <= 4 then
+				player.Character:PivotTo(CFrame.new(target))
+				break
+			end
+			player.Character:PivotTo(CFrame.new(root.Position + flat.Unit * 4 + Vector3.new(0, target.Y - root.Position.Y, 0)))
+			task.wait(0.2)
+		end
+		task.wait(0.3)
 	end
 	local function snapshot(p)
 		return HttpService:JSONEncode({ coins = p.coins, weapons = p.weapons, showcase = p.showcase, pads = p.pads, levels = p.levels, forged = p.weaponsForged }) -- ingots tick with production
@@ -174,7 +191,10 @@ local passed, err = pcall(function()
 	Plots.publish(b)
 	local ped = plotB.Showcase.Pedestal1
 	teleport(a, at(ped) * CFrame.new(0, 0, 3))
-	assert(Workshop.stealBegin(a, ib, 1), "Steal begin refused")
+	local begunSteal, holdInfo = Workshop.stealBegin(a, ib, 1)
+	assert(begunSteal and holdInfo.holdSec == 2.5, "A $5K weapon should take 2.5 s, got " .. tostring(holdInfo and holdInfo.holdSec))
+	local showcaseJson = HttpService:JSONDecode(plotB.ShowcaseData.Value)
+	assert(showcaseJson.slots[1].h == 2.5, "Prompt hold time not published for clients")
 	assert(not Workshop.stealCommit(a, ib, 1), "Steal committed without holding")
 	assert(Workshop.stealBegin(a, ib, 1))
 	task.wait(2.5)
@@ -184,15 +204,61 @@ local passed, err = pcall(function()
 	assert(pb.weapons[trophy.id] ~= nil, "Weapon left the victim before delivery")
 	local soldWhileCarried = Economy.sellAll(pb, nil, Workshop.carriedFrom(b))
 	assert(not soldWhileCarried and pb.weapons[trophy.id] ~= nil, "Carried weapon could be sold")
-	teleport(a, plotA.PlotSpawn.CFrame)
+	local carryStart = os.clock()
+	walkTo(a, plotA.PlotSpawn.CFrame)
 	waitUntil(function() return Workshop.carryOf(a) == nil end, 5, "delivery")
-	assert(pb.weapons[trophy.id] == nil and pb.showcase[1] == "", "Victim kept the stolen weapon")
 	local stolen = nil
-	for _, w in pa.weapons do
-		if w.v == 5000 and w.sf then stolen = w end
-	end
-	assert(stolen ~= nil, "Thief did not receive the weapon")
-	table.insert(evidence, "Real steal: 2.5 s hold, carried with marker, transferred only on reaching the thief's workshop")
+	waitUntil(function()
+		for _, w in pa.weapons do
+			if w.v == 5000 and w.sf then stolen = w end
+		end
+		return stolen ~= nil
+	end, 20, "durable delivery (victim save, then thief save)")
+	assert(pb.weapons[trophy.id] == nil and pb.showcase[1] == "", "Victim kept the stolen weapon")
+	waitUntil(function() return next(pb.outbox or {}) == nil end, 20, "outbox acknowledged after the thief's save")
+	assert(stolen.st == 1, "Stolen weapon not marked")
+	table.insert(evidence, string.format("Real steal: 2.5 s value-based hold, carried home on foot in %.1f s, saved victim-first then thief; outbox cleared", os.clock() - carryStart))
+
+	-- A teleport home with a carried weapon is refused and the weapon flies back.
+	local third = giveWeapon(pb, 4000)
+	assert(Economy.setShowcase(pb, 1, third.id))
+	Workshop._reset()
+	Plots.publish(b)
+	teleport(a, at(ped) * CFrame.new(0, 0, 3))
+	assert(Workshop.stealBegin(a, ib, 1))
+	task.wait(Workshop.Logic.holdSec(third))
+	assert(Workshop.stealCommit(a, ib, 1), "Teleport-test steal failed")
+	teleport(a, plotA.PlotSpawn.CFrame)
+	waitUntil(function() return Workshop.carryOf(a) == nil end, 5, "teleport rejection")
+	task.wait(0.5)
+	assert(pb.weapons[third.id] ~= nil and pb.showcase[1] == third.id, "Teleporting home delivered the weapon")
+	table.insert(evidence, "Teleporting home mid-carry: carry rejected, weapon back on its podium")
+
+	-- The displayed weapon cannot be swapped during a hold.
+	Workshop._reset()
+	local decoy = giveWeapon(pb, 50)
+	teleport(a, at(ped) * CFrame.new(0, 0, 3))
+	assert(Workshop.stealBegin(a, ib, 1))
+	assert(Economy.setShowcase(pb, 1, decoy.id))
+	task.wait(Workshop.Logic.holdSec(third))
+	local swapped, swapWhy = Workshop.stealCommit(a, ib, 1)
+	assert(not swapped and (swapWhy == "NoIntent" or swapWhy == "Moved"), "Swapped weapon could be stolen: " .. tostring(swapWhy))
+	assert(pb.weapons[decoy.id] and pb.weapons[third.id] and Workshop.carryOf(a) == nil, "Swap test moved a weapon")
+	assert(Economy.setShowcase(pb, 1, ""))
+	table.insert(evidence, "Swapping the displayed weapon mid-hold cancels the steal (" .. tostring(swapWhy) .. ")")
+
+	-- Cross-tier cash-out: a stolen endgame weapon pays like the thief's best metal.
+	local bigId = Economy.nextWeaponId(pa)
+	local big = ForgeMath.rollWeapon(rng, 20, 2, 5, { id = bigId, ts = os.time(), mult = 7 })
+	big.st, big.sf = 1, "Someone"
+	pa.weapons[bigId] = big
+	teleport(a, CFrame.new(0, 2, 15))
+	local coinsBefore = pa.coins
+	local okBig, soldBig = Remotes.handlers.SellWeapons(a, { bigId })
+	local expected = Economy.usableValue(pa, big, Forge.cashMultiplier(a))
+	assert(okBig and soldBig.coins == expected and soldBig.coins < big.v / 1000, "Endgame stolen weapon sold for its full value")
+	assert(pa.coins - coinsBefore == soldBig.coins)
+	table.insert(evidence, string.format("Stolen tier-20 weapon worth $%s sold for $%s by a tier-3 thief", ForgeMath.formatCoins(big.v), ForgeMath.formatCoins(soldBig.coins)))
 
 	-- Tag back: the owner touching the thief returns the weapon.
 	local second = giveWeapon(pb, 3000)
@@ -201,7 +267,7 @@ local passed, err = pcall(function()
 	local ped2 = plotB.Showcase.Pedestal2
 	teleport(a, at(ped2) * CFrame.new(0, 0, 3))
 	assert(Workshop.stealBegin(a, ib, 2))
-	task.wait(2.5)
+	task.wait(Workshop.Logic.holdSec(second))
 	assert(Workshop.stealCommit(a, ib, 2), "Second steal failed")
 	teleport(b, a.Character:GetPivot() * CFrame.new(2, -3, 0))
 	waitUntil(function() return Workshop.carryOf(a) == nil end, 5, "tag return")
@@ -221,13 +287,43 @@ local passed, err = pcall(function()
 	assert(not Workshop.lockForge(b), "Lock reused during its timer")
 	table.insert(evidence, "Forge Lock: 30 s timer published, intruder pushed out, stealing refused, no immediate reuse")
 
-	-- Restore synthetic profiles before departing so acceptance is non-destructive.
+	-- Station actions are refused away from the station and accepted at it.
+	local H = Remotes.handlers
+	teleport(a, CFrame.new(0, 2, 15)) -- the hub
+	local farConfig, farWhy = H.ForgeConfigure(a, 1, 1, 4, 4)
+	assert(not farConfig, "Forge configured from the hub")
+	assert(not H.ForgeBegin(a, 1, "free"), "Auto Forge started from the hub")
+	assert(not H.LineMaterial(a, 1, 1), "Ore line changed from the hub")
+	assert(not H.UnlockMaterial(a, 4, 1), "Material bought from the hub")
+	assert(not H.BuyUpgrade(a, "SmelterSpeed"), "Ore upgrade bought from the hub")
+	assert(not H.BuyUpgrade(a, "Hammer"), "Tool upgrade bought from the hub")
+	teleport(a, at(plotA.Machines.Forge1) * CFrame.new(0, 0, 5))
+	assert(H.ForgeConfigure(a, 1, 1, 4, 4), "Configure refused at the forge")
+	assert(H.ForgeBegin(a, 1, "free"), "Auto Forge refused at the forge")
+	assert(not H.Hatch(a, "hearth", 1), "Egg hatched from a workshop")
+	assert(not H.Evolve(a, false), "Evolved away from the altar")
+	teleport(a, CFrame.new(0, 2, 15))
+	task.wait(0.5)
+	assert(Forge.status(a)[1] and Forge.status(a)[1].auto, "Running Auto Forge stopped when the player walked away")
+	assert(H.ForgeStop(a, 1), "Stop refused")
+	table.insert(evidence, "Forge, ore, upgrade, hatch and evolve actions refused away from their stations (" .. tostring(farWhy) .. "); Auto Forge keeps running after walking away")
+
+	-- Forge Lock state belongs to the owner: a departing owner's lock does not pass on.
 	Workshop._reset()
+	teleport(a, plotA.LockButton.CFrame * CFrame.new(0, 0, -3))
+	assert(Workshop.lockForge(a), "Thief's own lock failed")
+	waitUntil(function() return (plotA:GetAttribute("LockedUntil") or 0) > workspace:GetServerTimeNow() end, 2, "own lock published")
+
+	-- Restore synthetic profiles before departing so acceptance is non-destructive.
 	restore(a)
 	restore(b)
 	a:Kick("Forge Frenzy isolated multiplayer acceptance completed")
 	waitUntil(function() return a.Parent ~= Players and Plots.indexOf(a) == 0 end, 15, "departure cleanup")
 	assert(plotA:GetAttribute("OwnerUserId") == 0, "Departed plot remains owned")
+	local inherited = Workshop.lockState(ia)
+	assert(inherited.lockedUntil == 0 and inherited.nextLockAt == 0, "Lock survived the workshop changing hands")
+	waitUntil(function() return (plotA:GetAttribute("LockedUntil") or 0) == 0 end, 2, "lock attribute cleared")
+	table.insert(evidence, "Owner left mid-lock: the workshop's lock and cooldown are cleared for the next owner")
 	assert(Plots.indexOf(b) == ib and Data.get(b) == pb, "Departure removed the other player's profile or plot")
 	table.insert(evidence, "Client departure releases its workshop while the other client keeps theirs")
 end)

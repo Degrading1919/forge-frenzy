@@ -20,6 +20,9 @@ Plots.MAX_PLOTS = 6
 Plots.WALK_SPEED = 28
 Plots.STATION_RANGE = 16
 Plots.BOOTH_RANGE = 24
+-- Station panels close on the client 22 studs from the prompt; the server allows a little more
+-- for latency when it checks that an action comes from the right place.
+Plots.PANEL_RANGE = 26
 
 local owners: { [number]: Player } = {}
 local lastShowcase: { [Player]: string } = {}
@@ -193,6 +196,10 @@ local function assign(player: Player)
 			Remotes.session(player).plotIndex = i
 			Remotes.markDirty(player)
 			lastPads[i] = nil
+			local Workshop = Remotes.svc("WorkshopService")
+			if Workshop and Workshop.resetPlot then
+				Workshop.resetPlot(i) -- a new owner starts with no lock and no lock cooldown
+			end
 			return true
 		end
 	end
@@ -218,6 +225,10 @@ local function release(player: Player)
 		setSign(i, "Free Workshop")
 		lastPads[i] = nil
 		Plots.applyPads(i, nil)
+		local Workshop = Remotes.svc("WorkshopService")
+		if Workshop and Workshop.resetPlot then
+			Workshop.resetPlot(i)
+		end
 	end
 	lastShowcase[player] = nil
 	lastPets[player] = nil
@@ -250,13 +261,14 @@ local function publish(player: Player)
 		local Workshop = Remotes.svc("WorkshopService")
 		local carried = if Workshop then Workshop.carriedFrom(player) else {}
 		local Economy = require(game:GetService("ReplicatedStorage").Shared.Economy) :: any
+		local Steal = require(game:GetService("ReplicatedStorage").Shared.Steal) :: any
 		local Evolution = Remotes.svc("ForgeService")
 		local mult = if Evolution and Evolution.cashMultiplier then Evolution.cashMultiplier(player) else 1
 		local entries = {}
 		for i = 1, 8 do
 			local id = p.showcase and p.showcase[i]
 			local w = id and id ~= "" and p.weapons and p.weapons[id]
-			entries[i] = if w then { c = w.c, d = w.d, r = w.r, t = w.t, m = w.m, q = w.q, v = w.v, inc = Economy.displayIncome(p, w, mult), gone = carried[id] == true } else ""
+			entries[i] = if w then { c = w.c, d = w.d, r = w.r, t = w.t, m = w.m, q = w.q, v = w.v, inc = Economy.displayIncome(p, w, mult), h = Steal.holdSeconds(w.v), gone = carried[id] == true } else ""
 		end
 		local json = HttpService:JSONEncode({ slots = entries, unlocked = Economy.showcaseSlots(p), shield = (p.weaponsForged or 0) < (Workshop and Workshop.Logic.SHIELD_FORGES or 0) })
 		if lastShowcase[player] ~= json then
@@ -332,6 +344,74 @@ function Plots.nearStation(player: Player, station: number): boolean
 		return false
 	end
 	return (root.Position - forge:GetPivot().Position).Magnitude <= Plots.STATION_RANGE
+end
+
+local function flatDistance(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
+-- World positions of the prompts an action may be started from (see WorldPrompts).
+local function placePoints(player: Player, kind: string, arg: any): { Vector3 }
+	local points = {}
+	local function add(inst: Instance?)
+		local att = inst and inst:FindFirstChild("PromptPoint", true)
+		if att and att:IsA("Attachment") then
+			table.insert(points, att.WorldPosition)
+		end
+	end
+	local index = Plots.indexOf(player)
+	local machines = find(index, { "Machines" })
+	if kind == "Forge" or kind == "Ore" then
+		for _, model in (if machines then machines:GetChildren() else {}) do
+			local which = if kind == "Forge" then model:GetAttribute("ForgeIndex") else model:GetAttribute("LineIndex")
+			if which and (arg == nil or which == arg) then
+				if kind == "Ore" then
+					add(model:FindFirstChild("Drill"))
+					add(model:FindFirstChild("Smelter"))
+				else
+					add(model)
+				end
+			end
+		end
+	elseif kind == "Storage" or kind == "Tools" then
+		add(machines and machines:FindFirstChild(if kind == "Storage" then "Storage" else "ToolRack"))
+	else
+		local world = workspace:FindFirstChild("World")
+		local hub = world and world:FindFirstChild("Hub")
+		if kind == "Egg" then
+			local hatchery = hub and hub:FindFirstChild("Hatchery")
+			for _, stand in (if hatchery then hatchery:GetChildren() else {}) do
+				if stand:GetAttribute("EggId") == arg then
+					add(stand)
+				end
+			end
+		elseif kind == "Altar" then
+			add(hub and hub:FindFirstChild("EvolutionAltar"))
+		end
+	end
+	return points
+end
+
+--[[
+	True when the player stands at a place they could open the matching panel from:
+	  "Forge", stationIndex   one of their forges (nil = any forge)
+	  "Ore", lineIndex        one of their ore lines' drill or smelter (nil = any line)
+	  "Storage" / "Tools"     their storage vault / tool rack
+	  "Egg", eggId            that egg's stand in the hub
+	  "Altar"                 the evolution altar
+]]
+function Plots.nearPlace(player: Player, kind: string, arg: any?): boolean
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then
+		return false
+	end
+	for _, point in placePoints(player, kind, arg) do
+		if flatDistance(root.Position, point) <= Plots.PANEL_RANGE then
+			return true
+		end
+	end
+	return false
 end
 
 function Plots.nearBooth(player: Player): boolean

@@ -227,4 +227,36 @@ tests["defaults preserve existing progress and isolate nested tables"] = functio
 	table.insert(dataA.custom.pets, "pet")
 	assert(dataA.coins == 12345 and #dataB.custom.pets == 0)
 end
+
+tests["profile messages reach registered handlers and are marked processed once applied"] = function()
+	local service, p, profile = fresh(), player(), fakeProfile()
+	local queue, processed, seen = { { kind = "steal", id = "T1" }, { kind = "unknown" } }, {}, {}
+	profile.MessageHandler = function(self, fn)
+		for i, message in queue do
+			fn(message, function() processed[i] = true end)
+		end
+	end
+	service.registerMessageHandler("steal", function(who, data, message)
+		table.insert(seen, message.kind)
+		assert(who == p and data == profile.Data)
+		return message.kind == "steal"
+	end)
+	service._attachForTest(p, profile)
+	assert(#seen == 2 and processed[1] == true and processed[2] == nil, "only handled messages are marked processed")
+end
+
+tests["sendMessage queues into the player's key and fails closed without storage"] = function()
+	local service = fresh()
+	assert(service.sendMessage(5, { kind = "steal" }) == false, "no storage: refused")
+	local sent = {}
+	service._inject({isStudio = function() return true end, getLibrary = function()
+		return { DataStoreState = "Access", New = function()
+			return { MessageAsync = function(_, key, message) table.insert(sent, { key, message }); return true end }
+		end }
+	end})
+	service.init()
+	assert(service.sendMessage(5, { kind = "steal" }) == true and sent[1][1] == "Player_5")
+	assert(service.sendMessage(-1, {}) == false and service.sendMessage("5" :: any, {}) == false, "bad ids refused")
+end
+
 return tests
