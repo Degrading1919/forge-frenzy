@@ -1,5 +1,5 @@
 --!nonstrict
--- Client-side companions following every player (data: Player attribute EquippedPets, comma-separated kind ids).
+-- Client-side companions following every player (data: Player attribute EquippedPets, comma-separated "kind:level").
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -69,12 +69,21 @@ local function setKinds(player, str)
 	tr.kinds = str
 	destroyPets(tr)
 	local n = 0
-	for kind in string.gmatch(str, "[^,%s]+") do
+	for entry in string.gmatch(str, "[^,%s]+") do
 		n += 1
 		if n > MAX_PETS then
 			break
 		end
-		table.insert(tr.pets, { inst = buildPet(kind), pos = nil, dir = Vector3.new(0, 0, -1) })
+		-- Entries are "kind:level"; merged pets grow a little with each level.
+		local kind, lv = string.match(entry, "^([^:]+):?(%d*)$")
+		local inst = buildPet(kind or entry)
+		local level = tonumber(lv) or 1
+		if level > 1 and inst:IsA("Model") then
+			pcall(function()
+				inst:ScaleTo(1 + 0.15 * (level - 1))
+			end)
+		end
+		table.insert(tr.pets, { inst = inst, pos = nil, dir = Vector3.new(0, 0, -1) })
 	end
 end
 

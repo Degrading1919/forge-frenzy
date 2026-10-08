@@ -20,7 +20,7 @@ local Config = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config")
 local Companions = require(Config:WaitForChild("Companions"))
 local Eggs = require(Config:WaitForChild("Eggs"))
 
-export type Pet = { id: string, k: string, ts: number, src: string? }
+export type Pet = { id: string, k: string, ts: number, src: string?, lv: number? }
 export type Bonuses = { extract: number, smelt: number, prep: number, storage: number }
 
 local CompanionService = {}
@@ -193,15 +193,133 @@ function Logic.hatch(profile: any, eggId: any, count: any, opts: any): (boolean,
 	return true, hatched
 end
 
-local function bonusTotal(kindId: string): number
-	local kind = Companions.ById[kindId]
+-- Merge level of a pet (1 when it was never merged).
+function Logic.level(pet: any): number
+	local lv = if type(pet) == "table" then pet.lv else nil
+	if type(lv) ~= "number" or lv ~= lv then
+		return 1
+	end
+	return math.clamp(math.floor(lv), 1, Companions.MaxLevel)
+end
+
+local function bonusTotal(pet: any): number
+	local kind = Companions.ById[pet.k]
 	local total = 0
 	if kind then
 		for _, v in kind.bonus do
 			total += v
 		end
 	end
-	return total
+	return total * Companions.levelMultiplier(Logic.level(pet))
+end
+
+-- Pets that would be consumed merging `petId`: same kind, same level, not premium.
+function Logic.mergePartners(profile: any, petId: string): { string }
+	local pet = profile.pets[petId]
+	local partners = {}
+	if not pet then
+		return partners
+	end
+	local lv = Logic.level(pet)
+	local ids = {}
+	for id in profile.pets do
+		table.insert(ids, id)
+	end
+	-- Prefer consuming unequipped pets, then the oldest ids, so the result is predictable.
+	table.sort(ids, function(a: string, b: string)
+		local ea, eb = table.find(profile.equipped, a) ~= nil, table.find(profile.equipped, b) ~= nil
+		if ea ~= eb then
+			return not ea
+		end
+		return a < b
+	end)
+	for _, id in ids do
+		local other = profile.pets[id]
+		if id ~= petId and other.k == pet.k and Logic.level(other) == lv then
+			table.insert(partners, id)
+			if #partners >= Companions.MergeCount - 1 then
+				break
+			end
+		end
+	end
+	return partners
+end
+
+--[[
+	Merges `petId` with MergeCount - 1 identical pets (same kind and level) into one pet one
+	level higher. The kept pet stays equipped if it was; consumed pets are removed. Premium
+	pets have fixed, disclosed bonuses and cannot be merged.
+]]
+function Logic.merge(profile: any, petId: any): (boolean, any)
+	Logic.ensure(profile)
+	local pet = if type(petId) == "string" then profile.pets[petId] else nil
+	if pet == nil then
+		return false, "not owned"
+	end
+	local kind = Companions.ById[pet.k]
+	if kind == nil or kind.premium then
+		return false, "premium companions cannot be merged"
+	end
+	local lv = Logic.level(pet)
+	if lv >= Companions.MaxLevel then
+		return false, "max level"
+	end
+	local partners = Logic.mergePartners(profile, petId)
+	if #partners < Companions.MergeCount - 1 then
+		return false, "need more copies"
+	end
+	for _, id in partners do
+		local index = table.find(profile.equipped, id)
+		if index then
+			table.remove(profile.equipped, index)
+		end
+		profile.pets[id] = nil
+	end
+	pet.lv = lv + 1
+	return true, { pet = pet, consumed = partners }
+end
+
+-- Merges every pet that can merge, repeatedly (level 1 -> 2 -> ...). Returns merged pets.
+function Logic.mergeAll(profile: any): (boolean, any)
+	Logic.ensure(profile)
+	local merged = {}
+	for level = 1, Companions.MaxLevel - 1 do
+		-- Group by kind at this level; equipped pets are kept as the merge target first.
+		local groups: { [string]: { string } } = {}
+		for id, pet in profile.pets do
+			local kind = Companions.ById[pet.k]
+			if kind and not kind.premium and Logic.level(pet) == level then
+				groups[pet.k] = groups[pet.k] or {}
+				table.insert(groups[pet.k], id)
+			end
+		end
+		for _, ids in groups do
+			table.sort(ids, function(a: string, b: string)
+				local ea, eb = table.find(profile.equipped, a) ~= nil, table.find(profile.equipped, b) ~= nil
+				if ea ~= eb then
+					return ea
+				end
+				return a < b
+			end)
+			while #ids >= Companions.MergeCount do
+				local target = table.remove(ids, 1) :: string
+				for _ = 2, Companions.MergeCount do
+					local id = table.remove(ids) :: string
+					local index = table.find(profile.equipped, id)
+					if index then
+						table.remove(profile.equipped, index)
+					end
+					profile.pets[id] = nil
+				end
+				profile.pets[target].lv = level + 1
+				table.insert(merged, profile.pets[target])
+			end
+		end
+	end
+	if #merged == 0 then
+		return false, "nothing to merge"
+	end
+	return true, merged
 end
 
 function Logic.equip(profile: any, petId: any): (boolean, any)
@@ -237,7 +355,7 @@ function Logic.equipBest(profile: any): (boolean, any)
 		table.insert(ids, id)
 	end
 	table.sort(ids, function(a: string, b: string)
-		local ta, tb = bonusTotal(profile.pets[a].k), bonusTotal(profile.pets[b].k)
+		local ta, tb = bonusTotal(profile.pets[a]), bonusTotal(profile.pets[b])
 		if ta ~= tb then
 			return ta > tb
 		end
@@ -308,10 +426,12 @@ function Logic.bonuses(profile: any): Bonuses
 	Logic.ensure(profile)
 	local out: { [string]: number } = { extract = 0, smelt = 0, prep = 0, storage = 0 }
 	for _, petId in profile.equipped do
-		local kind = Companions.ById[profile.pets[petId].k]
+		local pet = profile.pets[petId]
+		local kind = Companions.ById[pet.k]
 		if kind then
+			local mult = Companions.levelMultiplier(Logic.level(pet))
 			for family, value in kind.bonus do
-				out[family] += value
+				out[family] += value * mult
 			end
 		end
 	end
@@ -382,6 +502,16 @@ function CompanionService.release(player: any, petId: any): (boolean, any)
 	return withProfile(player, function(profile)
 		return Logic.release(profile, petId)
 	end)
+end
+
+function CompanionService.merge(player: any, petId: any): (boolean, any)
+	return withProfile(player, function(profile)
+		return Logic.merge(profile, petId)
+	end)
+end
+
+function CompanionService.mergeAll(player: any): (boolean, any)
+	return withProfile(player, Logic.mergeAll)
 end
 
 function CompanionService.grantKind(player: any, kindId: string, src: string?): (boolean, any)

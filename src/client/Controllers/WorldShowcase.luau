@@ -1,5 +1,10 @@
 --!nonstrict
--- Renders each plot owner's showcase weapons on the pedestals (data: plot.ShowcaseData StringValue, JSON array of 6).
+--[[
+	Renders every workshop's displayed weapons on its podiums (data: plot.ShowcaseData JSON
+	{ slots = [8], unlocked, shield }) with a floating "+$X/sec" income label, and shows stolen
+	weapons being carried above the thief's head with a big THIEF! marker (player attribute
+	"Carrying" = "m,c,r,d").
+]]
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 
@@ -22,45 +27,47 @@ local function clearSlot(s)
 	s.inst, s.gui, s.fix, s.pos, s.sig = nil, nil, nil, nil, nil
 end
 
+local function textLabel(parent, y, h, text, color, size)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Position = UDim2.fromOffset(0, y)
+	l.Size = UDim2.new(1, 0, 0, h)
+	l.Font = Enum.Font.FredokaOne
+	l.TextSize = size
+	l.TextColor3 = color
+	l.Text = text
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 2.5
+	stroke.Color = Color3.fromRGB(22, 18, 48)
+	stroke.Parent = l
+	l.Parent = parent
+	return l
+end
+
 local function makeLabel(top, e)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "ShowcaseLabel"
 	gui.Adornee = top
-	gui.Size = UDim2.fromOffset(240, 54)
-	gui.StudsOffset = Vector3.new(0, 7.5, 0)
-	gui.MaxDistance = 30
+	gui.Size = UDim2.fromOffset(220, 74)
+	gui.StudsOffset = Vector3.new(0, 6.6, 0)
+	gui.MaxDistance = 45
 	gui.AlwaysOnTop = false
-	local name = Instance.new("TextLabel")
-	name.BackgroundTransparency = 1
-	name.Size = UDim2.new(1, 0, 0, 28)
-	name.Font = Enum.Font.FredokaOne
-	name.TextSize = 20
-	name.TextColor3 = Common.rarityColor(e.r)
-	name.TextStrokeTransparency = 0.3
-	name.Text = WeaponDisplay.displayName(e)
-	name.Parent = gui
-	local sub = Instance.new("TextLabel")
-	sub.BackgroundTransparency = 1
-	sub.Position = UDim2.fromOffset(0, 28)
-	sub.Size = UDim2.new(1, 0, 0, 22)
-	sub.Font = Enum.Font.GothamBold
-	sub.TextSize = 16
-	sub.TextColor3 = Color3.fromRGB(255, 220, 120)
-	sub.TextStrokeTransparency = 0.4
-	local rn = Common.RarityNames[e.r or 1] or ""
-	sub.Text = e.v and (rn .. "  -  " .. Common.abbrev(e.v) .. " coins") or rn
-	sub.Parent = gui
+	gui.LightInfluence = 0
+	textLabel(gui, 0, 24, WeaponDisplay.displayName(e), Common.rarityColor(e.r), 20)
+	textLabel(gui, 24, 26, "$" .. Common.abbrev(e.v or 0), Color3.fromRGB(255, 220, 90), 24)
+	textLabel(gui, 50, 24, "+$" .. Common.abbrev(e.inc or 0) .. "/sec", Color3.fromRGB(100, 240, 110), 22)
 	gui.Parent = top
 	return gui
 end
 
 local function render(plot, tr, raw)
-	local ok, list = pcall(HttpService.JSONDecode, HttpService, raw ~= "" and raw or "[]")
-	if not ok or type(list) ~= "table" then
-		list = {}
+	local ok, data = pcall(HttpService.JSONDecode, HttpService, raw ~= "" and raw or "{}")
+	if not ok or type(data) ~= "table" then
+		data = {}
 	end
+	local list = data.slots or {}
 	local showcase = plot:FindFirstChild("Showcase")
-	for i = 1, 6 do
+	for i = 1, 8 do
 		local s = tr.slots[i]
 		if not s then
 			s = {}
@@ -68,7 +75,8 @@ local function render(plot, tr, raw)
 		end
 		local e = list[i]
 		local sig = ""
-		if type(e) == "table" and e.c then
+		local ped0 = showcase and showcase:FindFirstChild("Pedestal" .. i)
+		if type(e) == "table" and e.c and not e.gone and ped0 then
 			sig = HttpService:JSONEncode(e)
 		end
 		if sig ~= (s.sig or "") then
@@ -132,7 +140,87 @@ local function step(dt)
 	end
 end
 
+-- Stolen weapons riding above thieves' heads ------------------------------------------------
+
+local Players = game:GetService("Players")
+local carried = {} -- [player] = { sig, inst, fix, gui }
+
+local function clearCarry(player)
+	local c = carried[player]
+	if c then
+		if c.inst then c.inst:Destroy() end
+		if c.gui then c.gui:Destroy() end
+		carried[player] = nil
+	end
+end
+
+local function updateCarry(player)
+	local sig = player:GetAttribute("Carrying")
+	local c = carried[player]
+	if not sig or sig == "" then
+		clearCarry(player)
+		return
+	end
+	if c and c.sig == sig then
+		return
+	end
+	clearCarry(player)
+	local m, cl, r, d = string.match(sig, "^(%d+),(%d+),(%d+),(.+)$")
+	if not m then
+		return
+	end
+	local e = { m = tonumber(m), c = tonumber(cl), r = tonumber(r), d = d }
+	local inst, fix = WeaponDisplay.build(e, 3.5)
+	inst.Parent = Common.fxFolder()
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "ThiefMarker"
+	gui.Size = UDim2.fromOffset(180, 44)
+	gui.StudsOffset = Vector3.new(0, 7.5, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = 250
+	local label = textLabel(gui, 0, 44, if player == Players.LocalPlayer then "RUN HOME!" else "THIEF! TAG THEM!", Color3.fromRGB(255, 80, 90), 30)
+	label.Size = UDim2.new(1, 0, 1, 0)
+	gui.Parent = Common.player:WaitForChild("PlayerGui")
+	carried[player] = { sig = sig, inst = inst, fix = fix, gui = gui }
+end
+
+local function stepCarries()
+	for player, c in carried do
+		local char = player.Character
+		local head = char and char:FindFirstChild("Head")
+		if not head or player.Parent ~= Players then
+			clearCarry(player)
+		else
+			c.gui.Adornee = head
+			c.inst:PivotTo(CFrame.new(head.Position + Vector3.new(0, 3.2 + math.sin(t * 4) * 0.25, 0)) * CFrame.Angles(0, t * 2, 0) * c.fix)
+		end
+	end
+end
+
 function WorldShowcase.start()
+	local function watch(player)
+		player:GetAttributeChangedSignal("Carrying"):Connect(function()
+			updateCarry(player)
+		end)
+		updateCarry(player)
+	end
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
+	Players.PlayerAdded:Connect(watch)
+	Players.PlayerRemoving:Connect(clearCarry)
+	RunService.Heartbeat:Connect(stepCarries)
+	-- Podiums appear when they are built; re-render now and then so new ones fill in.
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			for plot, tr in tracked do
+				if tr.sv and tr.sv.Parent then
+					pcall(render, plot, tr, tr.sv.Value)
+				end
+			end
+		end
+	end)
 	local plots = nil
 	while not plots do
 		plots = Common.plotsFolder()

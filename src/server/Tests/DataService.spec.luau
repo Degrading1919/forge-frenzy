@@ -45,7 +45,7 @@ tests["Studio uses isolated persistent name and original player key"] = function
 	end})
 	service.init()
 	service._loadForTest(p)
-	assert(names[1] == "ForgeFrenzy_Player_v1_StudioPlaytest")
+	assert(names[1] == "ForgeFrenzy_Player_v2_StudioPlaytest")
 	assert(keys[1] == "Player_77")
 	assert(service.getStatus().mode == "StudioPersistent" and service.getStatus().persistent)
 	assert(service.get(p) == saved.Data)
@@ -57,7 +57,7 @@ tests["live keeps existing store and key"] = function()
 		return {DataStoreState = "Access", New = function(storeName) name = storeName; return {} end}
 	end})
 	service.init()
-	assert(name == "ForgeFrenzy_Player_v1" and service.getStatus().mode == "Production")
+	assert(name == "ForgeFrenzy_Player_v2" and service.getStatus().mode == "Production")
 end
 
 tests["API unavailable Studio is explicit session mock"] = function()

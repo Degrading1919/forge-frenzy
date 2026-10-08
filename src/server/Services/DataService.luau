@@ -3,7 +3,7 @@
 local Players = game:GetService("Players")
 local Economy = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Economy"))
 local DataService = {}
-DataService.STORE_NAME = "ForgeFrenzy_Player_v1"
+DataService.STORE_NAME = "ForgeFrenzy_Player_v2"
 DataService.STUDIO_SUFFIX = "_StudioPlaytest"
 DataService.KEY_PREFIX = "Player_"
 DataService.profileChanged = Instance.new("BindableEvent")

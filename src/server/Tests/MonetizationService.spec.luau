@@ -186,7 +186,7 @@ tests["processReceipt waits for a successful save before acknowledging"] = funct
 	saveWorks = true
 	assert(Service.processReceipt(info, { UserId = 1 }) == "PurchaseGranted")
 	Products.ProductById[9005] = nil
-	assert(data.coins == 2500, "retry must not double-grant, coins = " .. data.coins)
+	assert(data.coins == Products.ByKey.StarterPack.grants.coins, "retry must not double-grant, coins = " .. data.coins)
 	assert(Service.processReceipt(info, nil) == "NotProcessedYet")
 end
 
@@ -269,7 +269,7 @@ tests["receipt requires matching player, valid id and durable save hook"] = func
 	Products.ProductById[9006] = withId("StarterPack", 9006)
 	assert(Service.processReceipt({ PlayerId = 1, ProductId = 9006, PurchaseId = "valid" }, player) == "NotProcessedYet")
 	Products.ProductById[9006] = nil
-	assert(data.coins == 2500)
+	assert(data.coins == Products.ByKey.StarterPack.grants.coins)
 end
 
 tests["owns reads verified entitlements from the profile"] = function()

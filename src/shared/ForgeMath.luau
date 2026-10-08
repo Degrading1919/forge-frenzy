@@ -179,13 +179,36 @@ function ForgeMath.rawPosition(rarity: number, quality: number, hasTrait: boolea
 		+ jitter
 end
 
--- Sale value for a roll; always an integer inside [priceMin, priceMax] of the material.
-function ForgeMath.valueFor(materialIndex: number, rarity: number, quality: number, hasTrait: boolean, jitter: number): number
+-- Multiplier from the per-ingot material band to a weapon of `classIndex` (recipe size).
+function ForgeMath.classMult(classIndex: number?): number
+	local class = if classIndex then Balance.weaponClasses[classIndex] else nil
+	return if class then class.valueMult else 1
+end
+
+-- Value of a weapon at band `position` of the material, for a class and cash multiplier.
+function ForgeMath.valueAt(materialIndex: number, position: number, classIndex: number?, mult: number?): number
 	local mat = Materials[materialIndex]
+	local band = mat.priceMin + position * (mat.priceMax - mat.priceMin)
+	local value = band * ForgeMath.classMult(classIndex) * math.max(1, mult or 1)
+	return math.clamp(math.floor(value + 0.5), 1, Balance.maxCoins)
+end
+
+-- Sale value for a roll. Without class/multiplier it stays inside [priceMin, priceMax] of the
+-- material; a class scales the band by its recipe size and `mult` adds permanent cash bonuses.
+function ForgeMath.valueFor(materialIndex: number, rarity: number, quality: number, hasTrait: boolean, jitter: number, classIndex: number?, mult: number?): number
 	local payout = forge.payout
 	local position = math.clamp(ForgeMath.rawPosition(rarity, quality, hasTrait, jitter), payout.positionMin, payout.positionMax)
-	local value = math.floor(mat.priceMin + position * (mat.priceMax - mat.priceMin) + 0.5)
-	return math.clamp(value, mat.priceMin, mat.priceMax)
+	return ForgeMath.valueAt(materialIndex, position, classIndex, mult)
+end
+
+-- The most a weapon of this material could be worth: biggest recipe, top of the band.
+function ForgeMath.maxValue(materialIndex: number, mult: number?): number
+	local best = 1
+	for _, class in Balance.weaponClasses do
+		best = math.max(best, class.valueMult)
+	end
+	local mat = Materials[materialIndex]
+	return mat.priceMax * best * math.max(1, mult or 1)
 end
 
 function ForgeMath.designsFor(classIndex: number, rarity: number): { string }
@@ -206,7 +229,7 @@ function ForgeMath.isValidClass(index: any): boolean
 	return type(index) == "number" and index == math.floor(index) and Balance.weaponClasses[index] ~= nil
 end
 
-export type RollOptions = { id: string?, ts: number? }
+export type RollOptions = { id: string?, ts: number?, mult: number? }
 
 --[[
 	Rolls one weapon. Draw order is fixed (rarity, quality, trait chance, trait name, design,
@@ -232,7 +255,7 @@ function ForgeMath.rollWeapon(rng: Rng, materialIndex: number, classIndex: numbe
 		r = rarity,
 		d = design,
 		t = trait,
-		v = ForgeMath.valueFor(materialIndex, rarity, quality, trait ~= nil, jitter),
+		v = ForgeMath.valueFor(materialIndex, rarity, quality, trait ~= nil, jitter, classIndex, options and options.mult),
 		ts = if options and options.ts then options.ts else 0,
 	}
 end
@@ -265,7 +288,8 @@ local function expectedClamped(p: number, a: number, b: number, lo: number, hi: 
 end
 
 -- Expected sale value of one forge of `materialIndex` at `luck` (ignores integer rounding).
-function ForgeMath.expectedValue(materialIndex: number, luck: number): number
+-- Without a class this is the per-ingot band value; a class scales it by its value multiplier.
+function ForgeMath.expectedValue(materialIndex: number, luck: number, classIndex: number?, mult: number?): number
 	local mat = Materials[materialIndex]
 	local payout = forge.payout
 	local rarityChances = ForgeMath.rarityChances(luck)
@@ -282,7 +306,7 @@ function ForgeMath.expectedValue(materialIndex: number, luck: number): number
 			end
 		end
 	end
-	return mat.priceMin + expectedPosition * (mat.priceMax - mat.priceMin)
+	return (mat.priceMin + expectedPosition * (mat.priceMax - mat.priceMin)) * ForgeMath.classMult(classIndex) * math.max(1, mult or 1)
 end
 
 export type OddsTable = {
@@ -347,7 +371,7 @@ function ForgeMath.weaponName(weapon: Weapon): string
 	return table.concat(parts, " ")
 end
 
-local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi" }
+local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
 
 -- 1234 -> "1.23K", 12516238278 -> "12.5B"
 function ForgeMath.formatCoins(n: number): string

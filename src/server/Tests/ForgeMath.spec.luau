@@ -25,7 +25,7 @@ tests["32 materials with valid, increasing bands"] = function()
 			assert(m.priceMin > Materials[i - 1].priceMin, "min not increasing at " .. m.id)
 			assert(m.unlockCost > Materials[i - 1].unlockCost, "unlock not increasing at " .. m.id)
 		end
-		assert(m.priceMax <= Balance.maxSafeInteger, "unsafe integer " .. m.id)
+		assert(m.priceMax <= Balance.maxCoins, "value above the cash ceiling " .. m.id)
 	end
 	assert(Materials[1].unlockCost == 0, "copper must be free")
 end
@@ -92,13 +92,21 @@ tests["every roll stays inside its material band"] = function()
 		local mat = Materials[m]
 		for _ = 1, 400 do
 			local luck = 1 + rng:NextNumber() * 4
-			local w = ForgeMath.rollWeapon(rng, m, rng:NextInteger(1, 5), luck)
-			assert(w.v >= mat.priceMin and w.v <= mat.priceMax, `{mat.id} value {w.v} outside band`)
+			local class = rng:NextInteger(1, 5)
+			local mult = ({ 1, 1.5, 3 })[rng:NextInteger(1, 3)]
+			local classMult = Balance.weaponClasses[class].valueMult
+			local w = ForgeMath.rollWeapon(rng, m, class, luck, { mult = mult })
+			-- per-ingot band, scaled by the class recipe multiplier and the cash multiplier
+			local lo = math.floor(mat.priceMin * classMult * mult + 0.5)
+			local hi = math.floor(mat.priceMax * classMult * mult + 0.5)
+			assert(w.v >= lo and w.v <= hi, `{mat.id} class {class} x{mult}: value {w.v} outside [{lo}, {hi}]`)
 			assert(w.v == math.floor(w.v), "non-integer value")
+			assert(w.v <= ForgeMath.maxValue(m, mult) + 1, "above maxValue")
 		end
-		-- extreme positions
+		-- extreme positions, per ingot and with a class multiplier
 		assert(ForgeMath.valueFor(m, 6, 5, true, 0.01) <= mat.priceMax)
 		assert(ForgeMath.valueFor(m, 1, 1, false, -0.01) >= mat.priceMin)
+		assert(ForgeMath.valueFor(m, 6, 5, true, 0.01, 2) <= math.floor(mat.priceMax * 5 + 0.5))
 	end
 end
 
@@ -165,9 +173,9 @@ tests["expectedValue matches simulated mean"] = function()
 		local m, luck = case[1], case[2]
 		local n, sum = 60000, 0
 		for _ = 1, n do
-			sum += ForgeMath.rollWeapon(rng, m, 3, luck).v
+			sum += ForgeMath.rollWeapon(rng, m, 3, luck, { mult = 1.5 }).v
 		end
-		local expected = ForgeMath.expectedValue(m, luck)
+		local expected = ForgeMath.expectedValue(m, luck, 3, 1.5)
 		near(sum / n / expected, 1, 0.02, `material {m} at {luck}x`)
 	end
 	assert(ForgeMath.expectedValue(5, 5) > ForgeMath.expectedValue(5, 2.5), "luck must raise expectation")
@@ -209,6 +217,36 @@ tests["names and coin formatting"] = function()
 	assert(ForgeMath.formatCoins(1234) == "1.23K", ForgeMath.formatCoins(1234))
 	assert(ForgeMath.formatCoins(12516238278) == "12.5B", ForgeMath.formatCoins(12516238278))
 	assert(ForgeMath.formatCoins(694999999) == "694M", ForgeMath.formatCoins(694999999))
+end
+
+tests["class value multiplier and cash multiplier scale the per-ingot band"] = function()
+	for m = 1, #Materials do
+		local base = ForgeMath.expectedValue(m, 1.5)
+		for c, class in Balance.weaponClasses do
+			near(ForgeMath.expectedValue(m, 1.5, c) / base, class.valueMult, 1e-9, "class mult " .. class.id)
+			near(ForgeMath.expectedValue(m, 1.5, c, 2) / base, class.valueMult * 2, 1e-9, "cash mult")
+			assert(ForgeMath.valueAt(m, 0.5, c) >= ForgeMath.valueAt(m, 0.5), "bigger class never worth less")
+		end
+		assert(ForgeMath.expectedValue(m, 1.5, nil, 0.1) == base, "a multiplier below 1 never cuts value")
+	end
+	-- Primordium's best weapon is far beyond double precision of old safe-integer clamps.
+	assert(ForgeMath.maxValue(32) > 1e15 and ForgeMath.maxValue(32) <= Balance.maxCoins)
+	assert(ForgeMath.maxValue(1, 2) == 2 * ForgeMath.maxValue(1))
+	local biggest = 0
+	for _, class in Balance.weaponClasses do biggest = math.max(biggest, class.valueMult) end
+	near(ForgeMath.maxValue(5), Materials[5].priceMax * biggest, 1e-6, "maxValue is top of band x biggest class")
+end
+
+tests["bigger recipes pay more per forge but a little less per ingot"] = function()
+	local order = Balance.classDisplayOrder
+	assert(#order == #Balance.weaponClasses)
+	local lastIngots, lastMult, lastPerIngot = 0, 0, math.huge
+	for _, c in order do
+		local class = Balance.weaponClasses[c]
+		assert(class.ingots > lastIngots and class.valueMult > lastMult, "display order is smallest to largest")
+		assert(class.valueMult / class.ingots <= lastPerIngot + 1e-9, "per-ingot value must not rise with size")
+		lastIngots, lastMult, lastPerIngot = class.ingots, class.valueMult, class.valueMult / class.ingots
+	end
 end
 
 return tests

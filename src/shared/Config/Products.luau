@@ -48,7 +48,7 @@ local list: { Product } = {
 		id = 0,
 		name = "Multi-Forge",
 		paidRandom = true,
-		description = "One extra forge slot. Each extra weapon still costs its own ingot and rolls independently.",
+		description = "Every forge makes two weapons at once. Each extra weapon still costs its own ingots and rolls independently.",
 		effects = { forgeSlots = 1 },
 	},
 	{
@@ -56,7 +56,7 @@ local list: { Product } = {
 		kind = "pass",
 		id = 0,
 		name = "Multi-Hatch",
-		description = "Open 3 or 5 eggs at once. Each egg still costs coins; odds are unchanged.",
+		description = "Open 3 or 5 eggs at once. Each egg still costs cash; odds are unchanged.",
 		paidRandom = true, -- convenience on a randomized item; gated conservatively
 	},
 	{
@@ -90,8 +90,8 @@ local list: { Product } = {
 		key = "CollectionMagnet",
 		kind = "pass",
 		id = 0,
-		name = "Collection Magnet",
-		description = "Auto-sells manual forge results below your chosen rarity. Materials and free auto-forge output collect automatically for everyone.",
+		name = "Cash Magnet",
+		description = "Display cash flies into your wallet automatically, no trip to the collector needed.",
 	},
 	{
 		key = "VIPWorkshop",
@@ -106,7 +106,7 @@ local list: { Product } = {
 		kind = "product",
 		id = 0,
 		name = "Protected Evolution",
-		description = "Your next evolution keeps coins, materials and machine levels. You still need fresh progress to qualify.",
+		description = "Your next evolution keeps your cash, materials and machine upgrades. You still need fresh progress to qualify.",
 		grants = { evolveCharges = 1 },
 	},
 	{
@@ -114,9 +114,9 @@ local list: { Product } = {
 		kind = "product",
 		id = 0,
 		name = "Blacksmith Starter Pack",
-		description = "2,500 coins and the Apprentice Anvil Pup companion.",
+		description = "$5,000 cash and the Apprentice Anvil Pup companion.",
 		illustrativeRobux = 79,
-		grants = { coins = 2_500, companion = "apprentice_anvil_pup" },
+		grants = { coins = 5_000, companion = "apprentice_anvil_pup" },
 	},
 }
 

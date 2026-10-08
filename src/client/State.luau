@@ -6,6 +6,10 @@ local listeners: { (any) -> () } = {}
 
 function State.init(Net: any)
 	Net.on("Profile", function(p)
+		-- The server omits the weapon list when it has not changed since the last snapshot.
+		if p.weapons == nil then
+			p.weapons = if State.profile then State.profile.weapons else {}
+		end
 		State.profile = p
 		for _, fn in listeners do
 			task.spawn(fn, p)

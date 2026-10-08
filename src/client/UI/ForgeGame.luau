@@ -1,5 +1,11 @@
 --!nonstrict
--- Full-screen manual forging minigame: HEAT -> STRIKE -> QUENCH, then hands the server result to onReveal.
+--[[
+	Manual forging minigame (v2): HEAT -> TAP TAP TAP -> QUENCH -> reveal.
+
+	One giant tap target in the middle (taps anywhere on screen also count), a big hit counter,
+	a luck meter that fills as you tap faster, and a labeled countdown. The server counts the
+	real strikes; the client number is only feedback.
+]]
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Net = require(script.Parent.Parent.Net)
@@ -14,11 +20,10 @@ local ForgeGame = {}
 ForgeGame.onReveal = nil :: ((any) -> ())?
 
 local C = Theme.Colors
-local TICKS = { { 1.5, "1.5x\nFree auto" }, { 2.5, "2.5x\nTypical" }, { 4, "4x\nPremium" }, { 5, "5x\nMax" } }
 
-local ui = {}
+local ui: any = {}
 local active = false
-local session = nil
+local session: any = nil
 local t0 = 0
 local phase = "idle"
 local hits = 0
@@ -26,10 +31,7 @@ local finalLuck = nil
 local result = nil
 local ring = {}
 local ringI = 0
-local sparkI = 0
 local conns = {}
-local lastLuckText = ""
-local lastTimerText = ""
 
 local function luckFrom(h: number, secs: number): number
 	return math.clamp(1 + Data.LuckPerCps * h / math.max(secs, 0.001), 1, 5)
@@ -40,267 +42,130 @@ local function build()
 	local root = Theme.make("Frame", {
 		Name = "ForgeGame",
 		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(22, 14, 10),
-		BackgroundTransparency = 0.6,
-		ClipsDescendants = true,
+		BackgroundColor3 = Color3.fromRGB(40, 12, 4),
+		BackgroundTransparency = 0.45,
 		Parent = layer,
 	})
-	ui.root = root
 	local glow = Theme.make("Frame", {
-		Size = UDim2.new(1, 0, 0.6, 0),
-		Position = UDim2.new(0, 0, 0.4, 0),
+		Size = UDim2.new(1, 0, 0.7, 0),
+		Position = UDim2.new(0, 0, 0.3, 0),
 		BackgroundColor3 = C.orange,
-		BorderSizePixel = 0,
 		Parent = root,
 	})
 	local g = Instance.new("UIGradient")
 	g.Rotation = 90
-	g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.7) })
+	g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.55) })
 	g.Parent = glow
-
-	local stage = Theme.make("Frame", { Name = "Stage", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Parent = root })
-	ui.stage = stage
-	ui.title = Theme.make("TextLabel", {
-		Text = "HEAT UP",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.04, 0),
-		Size = UDim2.new(0.9, 0, 0, 56),
-		TextSize = Theme.ts(46),
-		TextColor3 = C.orange,
-		Parent = stage,
-	})
-	ui.timer = Theme.label({
-		Text = "",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.04, 56),
-		Size = UDim2.new(0.9, 0, 0, 28),
-		TextSize = Theme.ts(22),
-		Parent = stage,
-	})
-	ui.heat = Theme.bar({
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.04, 96),
-		Size = UDim2.new(0.8, 0, 0, 26),
-		FillColor = C.orange,
-		Parent = stage,
-	})
-	local lim = Instance.new("UISizeConstraint")
-	lim.MaxSize = Vector2.new(640, 26)
-	lim.Parent = ui.heat
-	ui.hits = Theme.make("TextLabel", {
-		Text = "0",
+	local stage = Theme.make("Frame", {
+		Name = "Stage",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.36, 0),
-		Size = UDim2.new(0.6, 0, 0, 90),
-		TextSize = Theme.ts(78),
-		TextColor3 = C.coin,
-		Parent = stage,
-	})
-	ui.hitsSub = Theme.label({
-		Text = "hits",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.36, 44),
-		Size = UDim2.new(0.6, 0, 0, 22),
-		TextSize = Theme.ts(16),
-		TextColor3 = C.dim,
-		Parent = stage,
-	})
-
-	-- luck meter
-	local meter = Theme.make("Frame", {
-		Name = "Meter",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.58, 0),
-		Size = UDim2.new(0.8, 0, 0, 30),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.fromOffset(520, 620),
 		BackgroundTransparency = 1,
-		Parent = stage,
+		Parent = root,
 	})
-	ui.meter = meter
-	local mlim = Instance.new("UISizeConstraint")
-	mlim.MaxSize = Vector2.new(640, 30)
-	mlim.Parent = meter
-	ui.luckBar = Theme.bar({ Size = UDim2.new(1, 0, 0, 22), FillColor = C.good, Parent = meter })
-	ui.luckBar.Label.Text = ""
-	for _, t in TICKS do
-		local f = (t[1] - 1) / 4
-		Theme.make("Frame", {
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(f, 0, 0, -3),
-			Size = UDim2.new(0, 3, 0, 28),
-			BackgroundColor3 = C.text,
-			ZIndex = 5,
-			Parent = meter,
-		})
-		Theme.make("TextLabel", {
-			Text = t[2],
-			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(f, 0, 0, 28),
-			Size = UDim2.new(0, 70, 0, 28),
-			TextSize = 11,
-			Font = Theme.Font2,
-			TextColor3 = C.dim,
-			Parent = meter,
-		})
-	end
-	ui.luck = Theme.make("TextLabel", {
-		Text = "Luck 1.00x",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 0.58, -22),
-		Size = UDim2.new(0.8, 0, 0, 34),
-		TextSize = Theme.ts(26),
-		TextColor3 = C.good,
-		Parent = stage,
-	})
-	ui.note = Theme.label({
-		Text = "Tap HIT, press Space, or use controller A to hammer.",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0.58, 66),
-		Size = UDim2.new(0.9, 0, 0, 20),
-		TextSize = 12,
-		TextColor3 = C.dim,
-		Parent = stage,
-	})
-
-	-- HIT button
-	local size = Theme.compact() and 150 or 180
+	Theme.autoScale(stage)
+	ui.root, ui.stage = root, stage
+	ui.recipe = Theme.text({ Text = "", Size = UDim2.new(1, 0, 0, 34), TextSize = 28, TextColor3 = C.yellow, Parent = stage })
+	ui.title = Theme.text({ Text = "HEAT UP", Position = UDim2.fromOffset(0, 34), Size = UDim2.new(1, 0, 0, 70), TextSize = 64, TextColor3 = C.orange, Parent = stage })
+	ui.timer = Theme.bar({ Position = UDim2.new(0.5, 0, 0, 112), AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 36), FillColor = C.orange, Parent = stage })
+	-- Giant tap target.
+	local hit = Instance.new("TextButton")
+	hit.Name = "Hit"
+	hit.AnchorPoint = Vector2.new(0.5, 0.5)
+	hit.Position = UDim2.new(0.5, 0, 0, 340)
+	hit.Size = UDim2.fromOffset(280, 280)
+	hit.Text = ""
+	hit.AutoButtonColor = false
+	hit.BackgroundColor3 = C.grey
+	hit.BorderSizePixel = 0
+	local hc = Instance.new("UICorner")
+	hc.CornerRadius = UDim.new(0.5, 0)
+	hc.Parent = hit
+	local hs = Instance.new("UIStroke")
+	hs.Color = C.ink
+	hs.Thickness = 6
+	hs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	hs.Parent = hit
+	local hg = Instance.new("UIGradient")
+	hg.Rotation = 90
+	hg.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(200, 200, 200))
+	hg.Parent = hit
+	hit.Parent = stage
+	ui.hit = hit
 	ui.hitScale = Instance.new("UIScale")
-	ui.hit = Theme.make("TextButton", {
-		Name = "Hit",
-		Text = "WAIT",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -24),
-		Size = UDim2.new(0, size, 0, size),
-		BackgroundColor3 = C.steel,
-		TextSize = Theme.ts(40),
-		AutoButtonColor = false,
-		Corner = size,
-		Stroke = { Color = C.brass, Thickness = 6 },
-		Parent = stage,
-	})
-	ui.hitScale.Parent = ui.hit
-	local function resize()
-		local available = root.AbsoluteSize
-		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
-		local short = available.Y < 440 and available.X >= 500
-		ui.title.TextSize = short and 30 or 40
-		ui.title.Size = UDim2.new(0.9, 0, 0, short and 38 or 50)
-		ui.title.Position = UDim2.new(0.5, 0, 0, 8)
-		ui.timer.Position = UDim2.new(0.5, 0, 0, short and 44 or 58)
-		ui.heat.Position = UDim2.new(0.5, 0, 0, short and 76 or 92)
-		ui.heat.Size = UDim2.new(0.8, 0, 0, 22)
-		if short then
-			ui.hits.Position = UDim2.new(0.22, 0, 0, 142)
-			ui.hits.Size = UDim2.new(0.32, 0, 0, 58)
-			ui.hits.TextSize = 52
-			ui.hitsSub.Position = UDim2.new(0.22, 0, 0, 173)
-			ui.luck.Position = UDim2.new(0.34, 0, 1, -65)
-			ui.luck.Size = UDim2.new(0.5, 0, 0, 30)
-			ui.luck.TextSize = 22
-			meter.Position = UDim2.new(0.34, 0, 1, -46)
-			meter.Size = UDim2.new(0.5, 0, 0, 30)
-			ui.hit.Position = UDim2.new(0.8, 0, 1, -16)
-			ui.hit.Size = UDim2.fromOffset(144, 144)
-			ui.hit.TextSize = 34
-			ui.note.Visible = false
-		else
-			ui.hits.Position = UDim2.new(0.5, 0, 0.32, 0)
-			ui.hits.Size = UDim2.new(0.6, 0, 0, 74)
-			ui.hits.TextSize = 64
-			ui.hitsSub.Position = UDim2.new(0.5, 0, 0.32, 37)
-			ui.luck.Position = UDim2.new(0.5, 0, 0.52, -18)
-			ui.luck.Size = UDim2.new(0.8, 0, 0, 34)
-			ui.luck.TextSize = 26
-			meter.Position = UDim2.new(0.5, 0, 0.52, 0)
-			meter.Size = UDim2.new(0.8, 0, 0, 30)
-			ui.hit.Position = UDim2.new(0.5, 0, 1, -18)
-			local hitSize = math.clamp(math.floor(available.Y * 0.23), 112, 180)
-			ui.hit.Size = UDim2.fromOffset(hitSize, hitSize)
-			ui.hit.TextSize = 36
-			ui.note.Position = UDim2.new(0.5, 0, 0.52, 66)
-			ui.note.Visible = available.Y >= 520
-		end
-	end
-	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
-	Panels.onViewportChanged(resize)
-	resize()
-
-	-- spark pool
+	ui.hitScale.Parent = hit
+	ui.hitIcon = Theme.text({ Text = "🔨", Size = UDim2.new(1, 0, 0.55, 0), Position = UDim2.fromScale(0, 0.08), TextSize = 110, TextStroke = false, Parent = hit })
+	ui.hitText = Theme.text({ Text = "WAIT", Size = UDim2.new(1, 0, 0.3, 0), Position = UDim2.fromScale(0, 0.62), TextSize = 54, Parent = hit })
+	ui.hits = Theme.text({ Text = "0", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(0.5, -150, 0, 340), Size = UDim2.fromOffset(110, 80), TextSize = 72, TextColor3 = C.yellow, Parent = stage })
+	Theme.text({ Text = "HITS", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(0.5, -150, 0, 378), Size = UDim2.fromOffset(110, 28), TextSize = 24, Parent = stage })
+	-- Luck meter.
+	ui.luckBar = Theme.bar({ Position = UDim2.new(0.5, 0, 0, 500), AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 44), FillColor = C.green, Parent = stage })
+	ui.luck = Theme.text({ Text = "LUCK 1.0x", Position = UDim2.new(0.5, 0, 0, 548), AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(420, 40), TextSize = 34, TextColor3 = C.green, Parent = stage })
+	Theme.text({ Text = "Tap fast for better weapons!", Position = UDim2.new(0.5, 0, 0, 586), AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(460, 30), TextSize = 22, TextColor3 = C.dim, Parent = stage })
 	ui.sparks = {}
 	for i = 1, 10 do
-		ui.sparks[i] = Theme.make("TextLabel", {
-			Text = "✦",
-			Size = UDim2.new(0, 30, 0, 30),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			TextColor3 = C.coin,
-			TextSize = 28,
-			TextTransparency = 1,
-			ZIndex = 8,
-			Parent = stage,
-		})
+		ui.sparks[i] = Theme.text({ Text = "✦", Size = UDim2.fromOffset(40, 40), AnchorPoint = Vector2.new(0.5, 0.5), TextSize = 40, TextColor3 = C.yellow, TextTransparency = 1, TextStroke = false, Parent = stage })
 	end
-
-	Panels.register("ForgeGame", root, nil, { locked = true, fullscreen = true, noBackdrop = true })
+	Panels.register("ForgeGame", root, nil, { locked = true, noBackdrop = true })
 end
 
+local sparkI = 0
 local function spark()
 	sparkI = sparkI % #ui.sparks + 1
 	local s = ui.sparks[sparkI]
-	local bx = ui.hit.AbsolutePosition.X + ui.hit.AbsoluteSize.X * (0.2 + math.random() * 0.6)
-	local by = ui.hit.AbsolutePosition.Y + ui.hit.AbsoluteSize.Y * 0.2
-	local o = ui.stage.AbsolutePosition
-	s.Position = UDim2.new(0, bx - o.X, 0, by - o.Y)
+	s.Position = UDim2.new(0.5, math.random(-90, 90), 0, 340 + math.random(-60, 20))
 	s.TextTransparency = 0
 	s.Rotation = math.random(-40, 40)
-	Theme.tween(s, 0.45, {
-		Position = UDim2.new(0, bx - o.X + math.random(-60, 60), 0, by - o.Y - math.random(80, 200)),
-		TextTransparency = 1,
-	})
+	Theme.tween(s, 0.45, { Position = s.Position + UDim2.fromOffset(math.random(-80, 80), -math.random(80, 180)), TextTransparency = 1 })
 end
 
 local function hit()
 	if phase ~= "strike" or not session then return end
 	local now = os.clock()
 	local idx = ringI % 20 + 1
-	if now - ring[idx] < 1 then return end -- client cap 20/s
+	if now - ring[idx] < 1 then return end -- client cap 20/s, same as the server guard
 	ring[idx] = now
 	ringI = idx
 	hits += 1
 	Net.strike(session.sessionId)
 	ForgeSignals.Hit:Fire()
 	ui.hits.Text = tostring(hits)
-	ui.hitScale.Scale = 0.88
-	Theme.tween(ui.hitScale, 0.1, { Scale = 1 }, Enum.EasingStyle.Back)
+	ui.hitScale.Scale = 0.86
+	Theme.tween(ui.hitScale, 0.12, { Scale = 1 }, Enum.EasingStyle.Back)
 	if not (State.profile and State.profile.settings and State.profile.settings.vfx == false) then
-		ui.stage.Position = UDim2.new(0, math.random(-7, 7), 0, math.random(-7, 7))
-		Theme.tween(ui.stage, 0.07, { Position = UDim2.new(0, 0, 0, 0) })
 		spark()
 	end
+end
+
+local function setHitColor(color: Color3)
+	ui.hit.BackgroundColor3 = color
 end
 
 local function setPhase(p: string)
 	phase = p
 	ForgeSignals.Phase:Fire(p)
 	if p == "heat" then
-		ui.title.Text = "HEAT UP"
+		ui.title.Text = "HEAT UP!"
 		ui.title.TextColor3 = C.orange
-		ui.hit.Text = "WAIT"
-		Theme.tween(ui.hit, 0.1, { BackgroundColor3 = C.steel })
+		ui.hitText.Text = "WAIT..."
+		setHitColor(C.grey)
 	elseif p == "strike" then
-		ui.title.Text = "STRIKE!"
-		ui.title.TextColor3 = C.coin
-		ui.hit.Text = "HIT!"
-		ui.heat.Fill.BackgroundColor3 = C.coin
-		Theme.tween(ui.hit, 0.1, { BackgroundColor3 = C.orange })
+		ui.title.Text = "TAP TAP TAP!"
+		ui.title.TextColor3 = C.yellow
+		ui.hitText.Text = "TAP!"
+		ui.timer.Fill.BackgroundColor3 = C.yellow
+		setHitColor(C.orange)
+		Theme.pop(ui.title, 0.6)
 	elseif p == "quench" then
-		ui.title.Text = "QUENCH"
-		ui.title.TextColor3 = Color3.fromRGB(110, 190, 255)
-		ui.hit.Text = "..."
-		ui.heat.Fill.BackgroundColor3 = Color3.fromRGB(110, 190, 255)
-		Theme.tween(ui.hit, 0.1, { BackgroundColor3 = C.steel })
+		ui.title.Text = "COOLING..."
+		ui.title.TextColor3 = C.blue
+		ui.hitText.Text = "💦"
+		ui.timer.Fill.BackgroundColor3 = C.blue
+		setHitColor(C.blue)
 		if not finalLuck then finalLuck = luckFrom(hits, session.windowSec) end
 	elseif p == "waiting" then
-		ui.title.Text = "REVEALING..."
-		ui.timer.Text = ""
+		ui.title.Text = "HERE IT COMES..."
 	end
 end
 
@@ -319,58 +184,30 @@ local function finish()
 end
 
 local function step()
-	local now = os.clock()
-	local t = now - t0
 	local s = session
 	if not s then return end
+	local t = os.clock() - t0
 	local heatEnd = s.heatSec
 	local strikeEnd = heatEnd + s.windowSec
 	local quenchEnd = strikeEnd + s.revealSec
-	local want
-	if t < heatEnd then
-		want = "heat"
-	elseif t < strikeEnd then
-		want = "strike"
-	elseif t < quenchEnd then
-		want = "quench"
-	else
-		want = "waiting"
-	end
+	local want = if t < heatEnd then "heat" elseif t < strikeEnd then "strike" elseif t < quenchEnd then "quench" else "waiting"
 	if want ~= phase then
-		-- allow skipping straight through short phases in order
-		if want == "strike" and phase == "heat" then setPhase("strike")
-		elseif want == "quench" then setPhase("quench")
-		elseif want == "waiting" then setPhase("waiting")
-		elseif want == "heat" then setPhase("heat") end
+		setPhase(want)
 	end
-
-	local timerText
 	if phase == "heat" then
-		Theme.setBar(ui.heat, t / heatEnd)
-		timerText = string.format("%.1fs", math.max(0, heatEnd - t))
+		Theme.setBar(ui.timer, t / heatEnd, string.format("Heating %.1fs", math.max(0, heatEnd - t)))
 	elseif phase == "strike" then
 		local el = t - heatEnd
-		Theme.setBar(ui.heat, 1 - el / s.windowSec)
-		timerText = string.format("%.1fs", math.max(0, s.windowSec - el))
+		Theme.setBar(ui.timer, 1 - el / s.windowSec, string.format("%.1fs left", math.max(0, s.windowSec - el)))
 		local luck = luckFrom(hits, math.clamp(el, 1, s.windowSec))
-		local txt = string.format("Luck %.2fx", luck)
-		if txt ~= lastLuckText then
-			lastLuckText = txt
-			ui.luck.Text = txt
-			Theme.setBar(ui.luckBar, (luck - 1) / 4)
-		end
+		ui.luck.Text = string.format("LUCK %.1fx", luck)
+		Theme.setBar(ui.luckBar, (luck - 1) / 4)
 	elseif phase == "quench" then
-		Theme.setBar(ui.heat, 1 - (t - strikeEnd) / s.revealSec)
-		timerText = ""
+		Theme.setBar(ui.timer, 1 - (t - strikeEnd) / s.revealSec, "Cooling")
 		local luck = finalLuck or 1
-		local txt = string.format("Luck %.2fx", luck)
-		if txt ~= lastLuckText then
-			lastLuckText = txt
-			ui.luck.Text = txt
-			Theme.setBar(ui.luckBar, (luck - 1) / 4)
-		end
+		ui.luck.Text = string.format("LUCK %.1fx", luck)
+		Theme.setBar(ui.luckBar, (luck - 1) / 4)
 	elseif phase == "waiting" then
-		timerText = ""
 		if result then
 			local r = result
 			result = nil
@@ -378,16 +215,12 @@ local function step()
 			Panels.close(true)
 			if ForgeGame.onReveal then ForgeGame.onReveal(r) end
 			return
-		elseif t > quenchEnd + 20 then
+		elseif t > quenchEnd + 15 then
 			finish()
 			Panels.close(true)
-			Toast.show("The forge did not respond. Check your inventory.", "bad")
+			Toast.show("The forge didn't answer. Check your backpack!", "bad")
 			return
 		end
-	end
-	if timerText ~= lastTimerText then
-		lastTimerText = timerText
-		ui.timer.Text = timerText
 	end
 end
 
@@ -395,7 +228,11 @@ function ForgeGame.isActive(): boolean
 	return active
 end
 
--- info = { sessionId, heatSec, windowSec, revealSec }
+function ForgeGame.station(): number?
+	return session and session.station
+end
+
+-- info = { sessionId, station, heatSec, windowSec, revealSec, recipe = "Iron Sword" }
 function ForgeGame.start(info: any)
 	if active then return end
 	active = true
@@ -403,21 +240,20 @@ function ForgeGame.start(info: any)
 	hits = 0
 	finalLuck = nil
 	result = nil
-	lastLuckText, lastTimerText = "", ""
 	for i = 1, 20 do
 		ring[i] = -10
 	end
 	ringI = 0
 	ui.hits.Text = "0"
-	ui.luck.Text = "Luck 1.00x"
+	ui.luck.Text = "LUCK 1.0x"
+	ui.recipe.Text = info.recipe or ""
 	Theme.setBar(ui.luckBar, 0)
-	ui.heat.Fill.BackgroundColor3 = C.orange
-	Theme.setBar(ui.heat, 0)
+	ui.timer.Fill.BackgroundColor3 = C.orange
+	Theme.setBar(ui.timer, 0)
 	phase = "idle"
 	t0 = os.clock()
 	Panels.open("ForgeGame")
 	setPhase("heat")
-
 	table.insert(conns, RunService.Heartbeat:Connect(step))
 	table.insert(conns, ui.hit.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -428,13 +264,13 @@ function ForgeGame.start(info: any)
 		local ut = input.UserInputType
 		if (ut == Enum.UserInputType.MouseButton1 or ut == Enum.UserInputType.Touch) and not processed then
 			hit()
-		elseif input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA or input.KeyCode == Enum.KeyCode.ButtonR2 then
+		elseif input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonA or input.KeyCode == Enum.KeyCode.ButtonR2 then
 			hit()
 		end
 	end))
 end
 
--- Server result arrived (ForgeResult push for the active session).
+-- Server result arrived (ForgeResult push for the active station).
 function ForgeGame.deliver(payload: any)
 	result = payload
 end

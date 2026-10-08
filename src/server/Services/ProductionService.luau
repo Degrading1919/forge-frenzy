@@ -2,9 +2,10 @@
 --[[
 	ProductionService — automatic extraction and smelting for every loaded player.
 
-	Ticks once per second: each player's selected ore is extracted and smelted into ingots,
-	stalling at storage caps (Economy.settle). Offline time since the last save is settled on
-	join, capped by Balance.production.maxOfflineAccrualSec.
+	Ticks once per second: every owned ore line extracts its chosen material and smelts it into
+	ingots, stalling at its buffer/bin caps (Economy.settle). Offline time since the last save is
+	settled on join, capped by Balance.production.maxOfflineAccrualSec. Display income is owned
+	by WorkshopService.
 
 	Bonus hooks: bonuses(player) sums CompanionService.bonuses, EvolutionService.bonuses
 	(`production` feeds extract and smelt, `prep` feeds prep) and Balance.premiumBonuses for
@@ -84,14 +85,35 @@ function ProductionService.rates(player: Player): Economy.Rates?
 	return Economy.rates(data, ProductionService.bonuses(player))
 end
 
-function ProductionService.selectMaterial(player: Player, index: any): (boolean, any)
+-- Chooses the material ore line `line` (default 1) mines.
+function ProductionService.setLineMaterial(player: Player, line: any, index: any): (boolean, any)
 	local data = DataService.get(player)
 	if not data then
 		return false, "NotLoaded"
 	end
-	local ok, result = Economy.selectMaterial(data, index)
+	local ok, result = Economy.setLineMaterial(data, line, index)
 	if ok then
 		DataService.markDirty(player)
+	end
+	return ok, result
+end
+
+function ProductionService.selectMaterial(player: Player, index: any): (boolean, any)
+	return ProductionService.setLineMaterial(player, 1, index)
+end
+
+-- Buys material `index` (must be the next locked one); `line` switches to it at once.
+function ProductionService.unlockMaterial(player: Player, index: any, line: any): (boolean, any)
+	local data = DataService.get(player)
+	if not data then
+		return false, "NotLoaded"
+	end
+	local lineIndex = if type(line) == "number" and data.lines[line] then line else 1
+	local ok, result = Economy.unlockMaterial(data, index, lineIndex)
+	if ok then
+		data.highestTierEver = math.max(data.highestTierEver or 1, data.unlockedTier)
+		DataService.markDirty(player)
+		ProductionService.materialUnlocked:Fire(player, result)
 	end
 	return ok, result
 end
@@ -101,15 +123,10 @@ function ProductionService.unlockNextMaterial(player: Player): (boolean, any)
 	if not data then
 		return false, "NotLoaded"
 	end
-	local ok, result = Economy.unlockNextMaterial(data)
-	if ok then
-		DataService.markDirty(player)
-		ProductionService.materialUnlocked:Fire(player, result)
-	end
-	return ok, result
+	return ProductionService.unlockMaterial(player, data.unlockedTier + 1, 1)
 end
 
--- Coins needed for the next extractor tier, or false at the last tier.
+-- Cash needed for the next material, or false at the last tier.
 function ProductionService.unlockCost(player: Player): number | false
 	local data = DataService.get(player)
 	local nextMat = if data then Materials[data.unlockedTier + 1] else nil
@@ -122,7 +139,10 @@ function ProductionService.settleOffline(player: Player): number
 	if not data then
 		return 0
 	end
-	return Economy.settleOffline(data, os.time(), Economy.rates(data, ProductionService.bonuses(player)))
+	local elapsed = Economy.settleOffline(data, os.time(), Economy.rates(data, ProductionService.bonuses(player)))
+	-- WorkshopService settles offline display income from the same gap once loading finishes.
+	data.offlineGap = elapsed
+	return elapsed
 end
 
 -- Advances one player by dt seconds. Returns ore and ingots produced.

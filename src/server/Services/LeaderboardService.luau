@@ -27,7 +27,7 @@ LeaderboardService.Logic = Logic
 local WRITE_INTERVAL = 120
 local READ_INTERVAL = 60
 local TOP_SIZE = 50
-local STORE_VERSION = "v1"
+local STORE_VERSION = "v2"
 local LOG_SCALE = 1e12
 
 export type Metric = { key: string, field: string, label: string, logEncoded: boolean }

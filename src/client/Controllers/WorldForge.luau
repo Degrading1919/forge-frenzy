@@ -1,44 +1,49 @@
 --!nonstrict
--- Anvil presentation during forging: heated blank, sparks, hammer, quench steam, reveal.
+--[[
+	Forge station presentation in the world (v2): for every forge in your workshop, a glowing
+	blank heats on the anvil, a hammer bangs and sparks fly while it strikes (your taps, or a
+	steady rhythm on Auto), steam bursts at the quench, and the finished weapon pops up just
+	above the anvil (owner feedback: previews floated too high) with a rarity-colored glow.
+]]
 local RunService = game:GetService("RunService")
 
 local Common = require(script.Parent.WorldUtil.Common)
 local Sfx = require(script.Parent.WorldUtil.Sfx)
 local WeaponDisplay = require(script.Parent.WorldUtil.WeaponDisplay)
 local Net = require(script.Parent.Parent.Net)
+local ForgeSignals = require(script.Parent.Parent.UI.ForgeSignals)
+local ForgeGame = require(script.Parent.Parent.UI.ForgeGame)
 
 local WorldForge = { Priority = 0 }
 
-local RESULT_TIME = 6
-local conn = nil
-local S = {
-	heating = false,
-	blank = nil,
-	cool = nil, -- time quench started
-	hammer = nil,
-	hammerT = nil,
-	flash = 0,
-	result = nil,
-	lastResultId = nil,
-	lastResultAt = 0,
-}
+local RESULT_TIME = 3.5
+local stations = {} -- [index] = state
 
-local function refs()
-	local anvil = Common.myMachine("Anvil")
+local function refs(index)
+	local forge = Common.myMachine("Forge" .. index)
+	if not forge then
+		return nil
+	end
+	local anvil = forge:FindFirstChild("Anvil")
+	local tank = forge:FindFirstChild("Tank")
 	if not anvil then
 		return nil
 	end
-	local face = anvil:FindFirstChild("Face")
-	local trough = anvil:FindFirstChild("Trough")
-	local r = {
-		weaponSpot = face and face:FindFirstChild("WeaponSpot"),
-		sparkSpot = face and face:FindFirstChild("SparkSpot"),
-		steamSpot = trough and trough:FindFirstChild("SteamSpot"),
+	return {
+		weaponSpot = anvil:FindFirstChild("WeaponSpot"),
+		sparkSpot = anvil:FindFirstChild("SparkSpot"),
+		steamSpot = tank and tank:FindFirstChild("SteamSpot"),
+		fire = forge:FindFirstChild("FireMouth"),
 	}
-	if not r.weaponSpot then
-		return nil
+end
+
+local function stateOf(index)
+	local s = stations[index]
+	if not s then
+		s = { phase = "idle", blank = nil, hammer = nil, hammerT = nil, result = nil, lastAutoHit = 0 }
+		stations[index] = s
 	end
-	return r
+	return s
 end
 
 local function emitter(att, kind)
@@ -53,9 +58,9 @@ local function emitter(att, kind)
 	e.Name = "Forge" .. kind
 	e.Enabled = false
 	e.Rate = 0
-	e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 	e.LightEmission = 1
 	if kind == "Sparks" then
+		e.Texture = "rbxasset://textures/particles/sparkles_main.dds"
 		e.Lifetime = NumberRange.new(0.35, 0.8)
 		e.Speed = NumberRange.new(14, 28)
 		e.SpreadAngle = Vector2.new(70, 70)
@@ -77,366 +82,233 @@ local function emitter(att, kind)
 	return e
 end
 
-local function spotCF(att)
-	return CFrame.new(att.WorldPosition)
+local function clearBlank(s)
+	if s.blank then
+		s.blank:Destroy()
+		s.blank = nil
+	end
 end
 
-local function destroyBlank()
-	if S.blank then
-		S.blank:Destroy()
-		S.blank = nil
-	end
-	S.cool = nil
-end
-
-local function ensureLoop() end -- forward decl, set below
-
-local function startHeat()
-	if S.heating then
+local function startHeat(index)
+	local r = refs(index)
+	local s = stateOf(index)
+	if not r or not r.weaponSpot then
 		return
 	end
-	local r = refs()
-	if not r then
-		return
-	end
-	S.heating = true
-	destroyBlank()
+	clearBlank(s)
 	local bar = Instance.new("Part")
 	bar.Name = "HeatBlank"
-	bar.Size = Vector3.new(3.2, 0.28, 0.7)
+	bar.Size = Vector3.new(2.6, 0.26, 0.6)
 	bar.Material = Enum.Material.Neon
 	bar.Color = Color3.fromRGB(255, 120, 30)
 	bar.Anchored = true
 	bar.CanCollide = false
 	bar.CanQuery = false
 	bar.CanTouch = false
-	bar.CFrame = spotCF(r.weaponSpot) * CFrame.new(0, 0.2, 0)
+	bar.CFrame = CFrame.new(r.weaponSpot.WorldPosition) * CFrame.new(0, -0.7, 0)
 	local light = Instance.new("PointLight")
 	light.Color = Color3.fromRGB(255, 150, 60)
-	light.Range = 14
+	light.Range = 12
 	light.Brightness = 2
 	light.Parent = bar
 	bar.Parent = Common.fxFolder()
-	S.blank = bar
-	Sfx.play("heat", r.weaponSpot)
-	ensureLoop()
+	s.blank = bar
 end
 
-local function doHit()
-	local r = refs()
+local function hammerHit(index, loud)
+	local r = refs(index)
+	local s = stateOf(index)
 	if not r then
 		return
 	end
-	if not S.heating then
-		startHeat()
+	if loud then
+		Sfx.play("hammer_hit", r.sparkSpot or r.weaponSpot)
 	end
-	Sfx.play("hammer_hit", r.sparkSpot or r.weaponSpot)
 	if Common.vfx() then
 		local e = emitter(r.sparkSpot, "Sparks")
 		if e then
-			e:Emit(18)
+			e:Emit(if loud then 18 else 8)
 		end
 	end
-	S.flash = 1
-	S.hammerT = 0
-	if not S.hammer then
+	s.hammerT = 0
+	if not s.hammer then
 		local m = Instance.new("Model")
 		m.Name = "ForgeHammer"
 		local handle = Instance.new("Part")
 		handle.Name = "Handle"
-		handle.Size = Vector3.new(0.35, 3.2, 0.35)
+		handle.Size = Vector3.new(0.35, 3, 0.35)
 		handle.Color = Color3.fromRGB(110, 75, 45)
 		handle.Material = Enum.Material.Wood
 		handle.Parent = m
 		local head = Instance.new("Part")
 		head.Name = "Head"
-		head.Size = Vector3.new(1.5, 0.9, 0.9)
+		head.Size = Vector3.new(1.4, 0.85, 0.85)
 		head.Color = Color3.fromRGB(150, 155, 165)
 		head.Material = Enum.Material.Metal
 		head.Parent = m
 		Common.inert(m)
 		m.Parent = Common.fxFolder()
-		S.hammer = m
+		s.hammer = m
 	end
-	ensureLoop()
 end
 
-local function doQuench()
-	local r = refs()
+local function quench(index)
+	local r = refs(index)
+	local s = stateOf(index)
 	if not r then
 		return
 	end
-	if S.blank then
-		S.cool = os.clock()
+	clearBlank(s)
+	if s.hammer then
+		s.hammer:Destroy()
+		s.hammer = nil
 	end
-	Sfx.play("quench", r.steamSpot or r.weaponSpot)
 	if Common.vfx() then
 		local e = emitter(r.steamSpot, "Steam")
 		if e then
-			e:Emit(35)
+			e:Emit(20)
 		end
 	end
-	ensureLoop()
 end
 
-local function endHeat()
-	S.heating = false
-	destroyBlank()
-end
-
-local function clearResult()
-	if S.result then
-		S.result.root:Destroy()
-		S.result = nil
+local function clearResult(s)
+	if s.result then
+		s.result.root:Destroy()
+		s.result = nil
 	end
 end
 
-local function showResult(w)
-	if type(w) ~= "table" or not w.c then
+local function showResult(index, w, loud)
+	local r = refs(index)
+	local s = stateOf(index)
+	if not r or not r.weaponSpot or type(w) ~= "table" then
 		return
 	end
-	local now = os.clock()
-	if w.id and w.id == S.lastResultId and now - S.lastResultAt < 4 then
-		return
-	end
-	if not w.id and now - S.lastResultAt < 1 then
-		return
-	end
-	S.lastResultId, S.lastResultAt = w.id, now
-	local r = refs()
-	if not r then
-		return
-	end
-	endHeat()
-	clearResult()
-
+	clearResult(s)
 	local rarity = w.r or 1
 	local color = Common.rarityColor(rarity)
 	local base = r.weaponSpot.WorldPosition
 	local root = Instance.new("Folder")
-	root.Name = "ForgeReveal"
+	root.Name = "ForgeResult" .. index
 	local anchor = Instance.new("Part")
-	anchor.Name = "RevealAnchor"
 	anchor.Size = Vector3.one
 	anchor.Transparency = 1
 	anchor.Anchored = true
 	anchor.CanCollide = false
 	anchor.CanQuery = false
 	anchor.CanTouch = false
-	anchor.Position = base + Vector3.new(0, 7, 0)
+	anchor.Position = base + Vector3.new(0, 1.4, 0)
 	anchor.Parent = root
-	local aAtt = Instance.new("Attachment")
-	aAtt.Parent = anchor
 	local light = Instance.new("PointLight")
 	light.Color = color
-	light.Range = 10 + rarity * 5
-	light.Brightness = 2 + rarity * 0.5
+	light.Range = 8 + rarity * 3
+	light.Brightness = 1.5 + rarity * 0.4
 	light.Parent = anchor
-
-	local inst, fix = WeaponDisplay.build(w, 5)
+	local inst, fix = WeaponDisplay.build(w, 3)
 	inst.Parent = root
-	local res = { root = root, inst = inst, fix = fix, base = anchor.Position, t0 = now, light = light }
-
-	if Common.vfx() then
-		local beam = Instance.new("Beam")
-		beam.Attachment0 = r.weaponSpot
-		beam.Attachment1 = aAtt
-		beam.Color = ColorSequence.new(color)
-		beam.LightEmission = 1
-		beam.Width0 = 1.4
-		beam.Width1 = 0.3
-		beam.FaceCamera = true
-		beam.Transparency = NumberSequence.new(0.45)
-		beam.Parent = root
-		res.beam = beam
-		if rarity >= 5 then
-			local pillarBase = Instance.new("Part")
-			pillarBase.Name = "PillarBase"
-			pillarBase.Size = Vector3.one
-			pillarBase.Transparency = 1
-			pillarBase.Anchored = true
-			pillarBase.CanCollide = false
-			pillarBase.CanQuery = false
-			pillarBase.Position = base
-			pillarBase.Parent = root
-			local p0 = Instance.new("Attachment")
-			p0.Parent = pillarBase
-			local p1 = Instance.new("Attachment")
-			p1.Position = Vector3.new(0, 400, 0)
-			p1.Parent = pillarBase
-			local pillar = Instance.new("Beam")
-			pillar.Attachment0 = p0
-			pillar.Attachment1 = p1
-			pillar.Color = ColorSequence.new(color)
-			pillar.LightEmission = 1
-			pillar.Width0 = 7
-			pillar.Width1 = 7
-			pillar.FaceCamera = true
-			pillar.Segments = 1
-			pillar.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.4), NumberSequenceKeypoint.new(1, 0.9) })
-			pillar.Parent = root
-			res.pillar = pillar
-		end
+	if Common.vfx() and rarity >= 5 then
+		local p0 = Instance.new("Attachment")
+		p0.Parent = anchor
+		local p1 = Instance.new("Attachment")
+		p1.Position = Vector3.new(0, 300, 0)
+		p1.Parent = anchor
+		local pillar = Instance.new("Beam")
+		pillar.Attachment0 = p0
+		pillar.Attachment1 = p1
+		pillar.Color = ColorSequence.new(color)
+		pillar.LightEmission = 1
+		pillar.Width0 = 5
+		pillar.Width1 = 5
+		pillar.FaceCamera = true
+		pillar.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0.9) })
+		pillar.Parent = anchor
 	end
 	root.Parent = Common.fxFolder()
-	S.result = res
-	if rarity >= 5 then
-		Sfx.play("reveal_legendary", r.weaponSpot)
-	elseif rarity >= 3 then
-		Sfx.play("reveal_rare", r.weaponSpot)
-	else
-		Sfx.play("reveal_common", r.weaponSpot)
+	s.result = { root = root, inst = inst, fix = fix, base = anchor.Position, t0 = os.clock() }
+	if loud then
+		if rarity >= 5 then
+			Sfx.play("reveal_legendary", r.weaponSpot)
+		elseif rarity >= 3 then
+			Sfx.play("reveal_rare", r.weaponSpot)
+		else
+			Sfx.play("reveal_common", r.weaponSpot)
+		end
 	end
-	ensureLoop()
-end
-
-local function active()
-	return S.blank or S.hammer or S.result or S.flash > 0
 end
 
 local function step(dt)
 	local now = os.clock()
-	-- blank pulse / cooling
-	if S.blank then
-		if not S.blank.Parent then
-			S.blank = nil
-		else
-			local light = S.blank:FindFirstChildOfClass("PointLight")
-			local hot = Color3.fromRGB(255, 120, 30):Lerp(Color3.fromRGB(255, 215, 110), 0.5 + 0.5 * math.sin(now * 8))
-			if S.cool then
-				local k = math.clamp((now - S.cool) / 0.8, 0, 1)
-				S.blank.Color = hot:Lerp(Color3.fromRGB(110, 115, 125), k)
-				S.blank.Material = k > 0.7 and Enum.Material.Metal or Enum.Material.Neon
-				if light then
-					light.Brightness = 2 * (1 - k)
-				end
+	for index, s in stations do
+		if s.blank then
+			local glow = 0.5 + 0.5 * math.sin(now * 6)
+			s.blank.Color = Color3.fromRGB(255, 100 + glow * 80, 20 + glow * 40)
+		end
+		-- Auto forges hammer on a steady rhythm during their strike phase.
+		if s.phase == "strike" and s.auto and now - s.lastAutoHit > 0.45 then
+			s.lastAutoHit = now
+			hammerHit(index, false)
+		end
+		if s.hammer then
+			local r = refs(index)
+			if r and r.weaponSpot then
+				s.hammerT = (s.hammerT or 0) + dt
+				local swing = math.clamp(s.hammerT / 0.18, 0, 1)
+				local angle = math.rad(-70 + 70 * (1 - (1 - swing) ^ 2))
+				local pivot = CFrame.new(r.weaponSpot.WorldPosition + Vector3.new(1.6, 0.4, 0))
+				local cf = pivot * CFrame.Angles(0, 0, angle) * CFrame.new(-1.2, 1.4, 0)
+				s.hammer.Handle.CFrame = cf
+				s.hammer.Head.CFrame = cf * CFrame.new(0, 1.5, 0) * CFrame.Angles(0, 0, math.rad(90))
+			end
+		end
+		if s.result then
+			local t = now - s.result.t0
+			if t > RESULT_TIME then
+				clearResult(s)
 			else
-				S.blank.Color = hot
-				if light then
-					light.Brightness = 1.5 + 1.2 * math.sin(now * 8) + S.flash * 3
-				end
+				local bob = math.sin(t * 3) * 0.15
+				local rise = math.min(1, t / 0.25)
+				s.result.inst:PivotTo(CFrame.new(s.result.base + Vector3.new(0, bob + rise * 0.6, 0)) * CFrame.Angles(0, t * 2, 0) * s.result.fix)
 			end
-		end
-	end
-	if S.flash > 0 then
-		S.flash = math.max(0, S.flash - dt * 6)
-	end
-	-- hammer swing
-	if S.hammer and S.hammerT then
-		S.hammerT += dt
-		local ht = S.hammerT
-		local raise
-		if ht < 0.1 then
-			raise = 1 - ht / 0.1
-		elseif ht < 0.4 then
-			raise = ((ht - 0.1) / 0.3) * 0.7
-		else
-			raise = 0.7
-		end
-		local r = refs()
-		if r and S.hammer.Parent then
-			local pivot = r.weaponSpot.WorldPosition + Vector3.new(0.6, 0.45 + 2.2 * raise, 0)
-			local cf = CFrame.new(pivot) * CFrame.Angles(0, 0, -0.9 * raise)
-			local handle = S.hammer:FindFirstChild("Handle")
-			local head = S.hammer:FindFirstChild("Head")
-			if handle then
-				handle.CFrame = cf * CFrame.new(0.2, 1.6, 0)
-			end
-			if head then
-				head.CFrame = cf
-			end
-		end
-		if ht > 1.6 then
-			S.hammer:Destroy()
-			S.hammer, S.hammerT = nil, nil
-		end
-	end
-	-- result display
-	local res = S.result
-	if res then
-		local age = now - res.t0
-		if age >= RESULT_TIME or not res.root.Parent then
-			clearResult()
-		else
-			local bob = math.sin(age * 2.5) * 0.35
-			res.inst:PivotTo(CFrame.new(res.base + Vector3.new(0, bob, 0)) * CFrame.Angles(0, age * 1.6, 0) * res.fix)
-			local fade = math.clamp((RESULT_TIME - age) / 1, 0, 1)
-			res.light.Brightness = (2.5 + 1.5 * math.sin(age * 5)) * fade
-			if res.beam then
-				res.beam.Transparency = NumberSequence.new(1 - 0.55 * fade)
-			end
-			if res.pillar then
-				res.pillar.Transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0, 1 - 0.6 * fade),
-					NumberSequenceKeypoint.new(1, 1),
-				})
-			end
-		end
-	end
-	if not active() and conn then
-		conn:Disconnect()
-		conn = nil
-	end
-end
-
-ensureLoop = function()
-	if not conn then
-		conn = RunService.RenderStepped:Connect(step)
-	end
-end
-
-local function weaponOf(p)
-	if type(p) ~= "table" then
-		return nil
-	end
-	return p.weapon or p
-end
-
-local function bindSignals()
-	local okSig, Signals = pcall(function()
-		local ui = Common.Client:WaitForChild("UI", 10)
-		local mod = ui and ui:WaitForChild("ForgeSignals", 10)
-		return mod and require(mod)
-	end)
-	if okSig and type(Signals) == "table" then
-		if Signals.Started then
-			Signals.Started.Event:Connect(function()
-				startHeat()
-			end)
-		end
-		if Signals.Hit then
-			Signals.Hit.Event:Connect(function()
-				doHit()
-			end)
-		end
-		if Signals.Result then
-			Signals.Result.Event:Connect(function(p)
-				showResult(weaponOf(p))
-			end)
-		end
-		if Signals.Quench then
-			Signals.Quench.Event:Connect(doQuench)
 		end
 	end
 end
 
 function WorldForge.start()
-	task.spawn(bindSignals)
-	Net.on("ForgePhase", function(p)
-		if type(p) ~= "table" then
+	Net.on("ForgePhase", function(info)
+		if type(info) ~= "table" or not info.station then
 			return
 		end
-		if p.phase == "heat" then
-			startHeat()
-		elseif p.phase == "quench" then
-			doQuench()
-		elseif p.phase == "cancelled" then
-			endHeat()
+		local s = stateOf(info.station)
+		s.phase = info.phase
+		s.auto = info.mode ~= "manual"
+		if info.phase == "heat" then
+			startHeat(info.station)
+		elseif info.phase == "strike" then
+			if not s.blank then startHeat(info.station) end
+		elseif info.phase == "quench" then
+			quench(info.station)
+		elseif info.phase == "cancelled" or info.phase == "stopped" or info.phase == "waiting" then
+			clearBlank(s)
+			if s.hammer then
+				s.hammer:Destroy()
+				s.hammer = nil
+			end
 		end
 	end)
-	Net.on("ForgeResult", function(p)
-		showResult(weaponOf(p))
+	Net.on("ForgeResult", function(payload)
+		if type(payload) ~= "table" or not payload.station then
+			return
+		end
+		local first = payload.results and payload.results[1]
+		if first and first.weapon then
+			showResult(payload.station, first.weapon, not payload.auto or first.weapon.r >= 4)
+		end
 	end)
+	ForgeSignals.Hit:Connect(function()
+		local index = ForgeGame.station() or 1
+		hammerHit(index, true)
+	end)
+	RunService.Heartbeat:Connect(step)
 end
 
 return WorldForge

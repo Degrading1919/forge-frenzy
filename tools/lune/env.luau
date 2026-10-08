@@ -221,6 +221,17 @@ rawset(Players, "GetPlayers", function()
 	return {}
 end)
 services.Players = Players
+-- Inert stand-ins so world-glue modules (Net/Plots) can load for their pure helpers.
+services.HttpService = {
+	JSONEncode = function(_, value)
+		return serde.encode("json", value)
+	end,
+	JSONDecode = function(_, text)
+		return serde.decode("json", text)
+	end,
+}
+services.ServerStorage = newNode("ServerStorage", game, nil, nil)
+rawset(services.ServerStorage, "_children", {})
 services.RunService = {
 	IsStudio = function()
 		return true

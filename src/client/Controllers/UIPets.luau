@@ -1,299 +1,333 @@
 --!nonstrict
--- Pets panel (owned companions, equip/unequip, egg shop links) and Hatch panel + hatch reveal.
-local Net = require(script.Parent.Parent.Net)
-local State = require(script.Parent.Parent.State)
-local Theme = require(script.Parent.Parent.UI.Theme)
-local Format = require(script.Parent.Parent.UI.Format)
-local Data = require(script.Parent.Parent.UI.Data)
-local Panels = require(script.Parent.Parent.UI.Panels)
-local Toast = require(script.Parent.Parent.UI.Toast)
-local Viewport = require(script.Parent.Parent.UI.Viewport)
+--[[
+	Pets (docs/21 §12): the pet inventory with merging, and the egg stand hatch panel.
 
-local M = { Priority = 30 }
+	Pets: cards with stars for merge level, EQUIP BEST and MERGE ALL up top, tap a pet for its
+	3D close-up, bonus, EQUIP and MERGE (three of the same pet at the same level make one pet a
+	level higher). Hatch: the egg's price, every pet it can give with exact odds, and big HATCH
+	buttons. Results appear in the centered reveal with one big AWESOME! button.
+]]
+local State = require(script.Parent.Parent.State)
+local Net = require(script.Parent.Parent.Net)
+local UI = script.Parent.Parent.UI
+local Theme = require(UI.Theme)
+local Panels = require(UI.Panels)
+local Data = require(UI.Data)
+local Kit = require(UI.Kit)
+local Toast = require(UI.Toast)
+local Reveal = require(UI.Reveal)
+local Viewport = require(UI.Viewport)
+local Format = require(UI.Format)
+
+local M = { Priority = 10 }
 local C = Theme.Colors
 
--- Pets panel ---------------------------------------------------------------------
-local petsWin, petsList, slotsLabel, bonusLabel
-local petRows = {}
-local petsSig = ""
-local eggRowBuilt = false
-local releaseId = nil
+local pets: any = {}
+local hatch: any = {}
+local eggId = "hearth"
 
-local function isEquipped(p, id: string): boolean
-	return table.find(p.equipped or {}, id) ~= nil
+local function companions()
+	return Data.config("Companions")
 end
 
-local function refreshPets()
+local function levelMult(lv: number): number
+	local cfg = companions()
+	return cfg and cfg.levelMultiplier and cfg.levelMultiplier(lv) or 1
+end
+
+local function scaledBonus(kind: string, lv: number): any
+	local def = Data.companion(kind)
+	local out = {}
+	for k, v in def.bonus or {} do
+		out[k] = v * levelMult(lv)
+	end
+	return out
+end
+
+local function copies(p: any, pet: any): number
+	local n = 0
+	for _, other in p.pets or {} do
+		if other.kind == pet.kind and (other.lv or 1) == (pet.lv or 1) then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function isEquipped(p: any, id: string): boolean
+	return p.equipped ~= nil and table.find(p.equipped, id) ~= nil
+end
+
+-- Pet inventory ------------------------------------------------------------------------------
+
+local function closeDetail()
+	if pets.detail then
+		pets.detail.Visible = false
+		if pets.viewport then Viewport.clear(pets.viewport) end
+	end
+end
+
+local function openDetail(pet: any)
 	local p = State.profile
-	if not p or not petsWin or not petsWin.Visible then return end
-	local ids = { #(p.equipped or {}), p.petSlots or 0 }
-	for _, pet in p.pets or {} do
-		table.insert(ids, pet.id .. (isEquipped(p, pet.id) and "*" or ""))
-	end
-	local sig = table.concat(ids, ",")
-	if sig == petsSig then return end
-	petsSig = sig
+	if not p then return end
+	pets.current = pet
+	local def = Data.companion(pet.kind)
+	local color = Data.petRarityColor(def.rarity)
+	pets.detail.Visible = true
+	Theme.pop(pets.card, 0.7)
+	pets.card.BackgroundColor3 = Theme.shade(color, -0.55)
+	pets.dName.Text = def.name
+	pets.dName.TextColor3 = color
+	local lv = pet.lv or 1
+	pets.dStars.Text = string.rep("★", lv) .. string.rep("☆", 5 - lv)
+	pets.dBonus.Text = Data.bonusText(scaledBonus(pet.kind, lv))
+	Viewport.pet(pets.card, pet.kind, true, { Size = UDim2.fromOffset(200, 200), Position = UDim2.new(0.5, 0, 0, 92), AnchorPoint = Vector2.new(0.5, 0) }, pets.viewport)
+	local equipped = isEquipped(p, pet.id)
+	Theme.setText(pets.dEquip, if equipped then "UNEQUIP" else "EQUIP")
+	Theme.setColor(pets.dEquip, if equipped then C.orange else C.green)
+	local n = copies(p, pet)
+	local canMerge = not def.premium and lv < 5 and n >= 3
+	Theme.setText(pets.dMerge, if def.premium then "NO MERGE" elseif lv >= 5 then "MAX LEVEL" else string.format("MERGE %d/3", math.min(n, 3)))
+	Theme.setEnabled(pets.dMerge, canMerge)
+	pets.dHint.Text = if def.premium then "Premium pets keep their bonus" elseif lv >= 5 then "This pet is fully powered up!" else string.format("Merge 3 to get %s (x%.1f bonus)", string.rep("★", lv + 1), levelMult(lv + 1))
+end
 
-	slotsLabel.Text = string.format("Equipped %d / %d", #(p.equipped or {}), p.petSlots or 0)
-	local totals = { extract = 0, smelt = 0, prep = 0, storage = 0 }
-	local cfg = Data.config("Companions")
-	local cap = cfg and cfg.FamilyCap or 2
-	for _, pet in p.pets or {} do
-		if isEquipped(p, pet.id) then
-			for k, v in Data.companion(pet.kind).bonus or {} do
-				totals[k] = (totals[k] or 0) + v
-			end
-		end
+local function petCard(parent: Instance, pet: any, order: number, p: any)
+	local def = Data.companion(pet.kind)
+	local color = Data.petRarityColor(def.rarity)
+	local b = Instance.new("TextButton")
+	b.Name = "Pet_" .. pet.id
+	b.LayoutOrder = order
+	b.Text = ""
+	b.AutoButtonColor = false
+	b.BorderSizePixel = 0
+	b.BackgroundColor3 = Theme.shade(color, -0.5)
+	Theme.make("UICorner", { CornerRadius = UDim.new(0, 14), Parent = b })
+	Theme.make("UIStroke", { Color = if isEquipped(p, pet.id) then C.green else color, Thickness = if isEquipped(p, pet.id) then 5 else 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = b })
+	Theme.text({ Text = def.name, Size = UDim2.new(1, -8, 0, 40), Position = UDim2.fromOffset(4, 30), TextScaled = true, Parent = b })
+	Theme.text({ Text = string.rep("★", pet.lv or 1), Size = UDim2.new(1, -8, 0, 24), Position = UDim2.fromOffset(4, 4), TextSize = 22, TextColor3 = C.yellow, Parent = b })
+	Theme.text({ Text = def.rarity, Size = UDim2.new(1, -8, 0, 22), Position = UDim2.fromOffset(4, 74), TextSize = 18, TextColor3 = color, Parent = b })
+	if isEquipped(p, pet.id) then
+		Theme.chip("ON", C.green, { Size = UDim2.fromOffset(44, 24), Position = UDim2.new(1, -4, 1, -4), AnchorPoint = Vector2.new(1, 1), TextSize = 16, Parent = b })
 	end
-	for k, v in totals do
-		totals[k] = math.min(v, cap)
+	if not def.premium and (pet.lv or 1) < 5 and copies(p, pet) >= 3 then
+		Theme.chip("MERGE!", C.pink, { Size = UDim2.fromOffset(70, 24), Position = UDim2.new(0, 4, 1, -4), AnchorPoint = Vector2.new(0, 1), TextSize = 15, Parent = b })
 	end
-	bonusLabel.Text = "Active bonuses: " .. Data.bonusText(totals)
-
-	for _, r in petRows do
-		r:Destroy()
-	end
-	table.clear(petRows)
-	if #(p.pets or {}) == 0 then
-		table.insert(petRows, Theme.label({ Text = "No companions yet. Hatch an egg!", Size = UDim2.new(1, 0, 0, 50), TextColor3 = C.dim, LayoutOrder = 1, Parent = petsList }))
-	end
-	for i, pet in p.pets or {} do
-		local def = Data.companion(pet.kind)
-		local color = Data.petRarityColor(def.rarity)
-		local eq = isEquipped(p, pet.id)
-		local f = Theme.make("Frame", { Name = pet.id, Size = UDim2.new(1, -8, 0, 108), BackgroundColor3 = eq and C.panel2 or C.panel, Corner = 8, Stroke = { Color = color, Thickness = eq and 3 or 1.5 }, LayoutOrder = 10 + i, Parent = petsList })
-		Theme.make("Frame", { Size = UDim2.new(0, 36, 0, 36), Position = UDim2.new(0, 10, 0, 10), BackgroundColor3 = def.color or color, Corner = 18, Stroke = { Color = color, Thickness = 2 }, Parent = f })
-		Theme.label({ Text = def.name .. "  (" .. tostring(def.rarity) .. ")", Size = UDim2.new(1, -68, 0, 24), Position = UDim2.new(0, 56, 0, 6), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = color, TextSize = Theme.ts(15), TextWrapped = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = f })
-		Theme.label({ Text = Data.bonusText(def.bonus), Size = UDim2.new(1, -68, 0, 22), Position = UDim2.new(0, 56, 0, 30), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(12), Parent = f })
-		Theme.button({
-			Name = "Equip",
-			Text = eq and "Unequip" or "Equip",
-			Color = eq and C.steel or C.good,
-			Size = UDim2.new(0.5, -12, 0, 44),
-			Position = UDim2.new(0, 8, 1, -50),
-			TextSize = Theme.ts(16),
-			OnClick = function()
-				local ok, res = Net.call(eq and "UnequipPet" or "EquipPet", pet.id)
-				if not ok then Toast.show(res, "bad") end
-			end,
-			Parent = f,
-		})
-		if not def.premium then
-			local release
-			release = Theme.button({ Name = "Release", Text = releaseId == pet.id and "Confirm release" or "Release", Color = C.bad,
-				Size = UDim2.new(0.5, -12, 0, 44), Position = UDim2.new(0.5, 4, 1, -50), TextSize = Theme.ts(14), Parent = f,
-				OnClick = function()
-					if releaseId ~= pet.id then
-						releaseId = pet.id
-						petsSig = ""
-						refreshPets()
-						Toast.show("Tap Confirm release to permanently remove this companion", "info")
-						return
-					end
-					local ok, res = Net.call("ReleasePet", pet.id)
-					releaseId = nil
-					if not ok then Toast.show(res, "bad") end
-				end })
-		end
-		table.insert(petRows, f)
-	end
+	b.Activated:Connect(function()
+		openDetail(pet)
+	end)
+	b.Parent = parent
 end
 
 local function buildPets()
-	local content
-	petsWin, content = Panels.create("Pets", "Companions", { onOpen = function() releaseId = nil petsSig = "" refreshPets() end })
-	slotsLabel = Theme.label({ Text = "", Size = UDim2.new(0.4, 0, 0, 26), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.coin, TextSize = Theme.ts(16), Parent = content })
-	bonusLabel = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 32), Position = UDim2.new(0, 0, 0, 46), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = content })
-	Theme.button({ Name = "EquipBest", Text = "Equip best", Color = C.good, Size = UDim2.new(0, 126, 0, 44), Position = UDim2.new(1, -126, 0, 0), TextSize = Theme.ts(14), Parent = content, OnClick = function()
-		local ok, res = Net.call("EquipBestPets") if not ok then Toast.show(res, "bad") end
-	end })
-	local eggs = Theme.make("ScrollingFrame", { Name = "Eggs", Size = UDim2.new(1, 0, 0, 56), Position = UDim2.new(0, 0, 0, 82), BackgroundTransparency = 1, AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(), ScrollingDirection = Enum.ScrollingDirection.X, ScrollBarThickness = 4, Parent = content })
-	Theme.list(eggs, 6, Enum.FillDirection.Horizontal)
-	for i, egg in Data.eggs() do
-		Theme.button({
-			Text = "🥚 " .. egg.name .. "\n🪙 " .. Format.abbr(egg.coinCost),
-			Color = egg.color or C.orange,
-			Name = egg.id,
-			Size = UDim2.new(0, 120, 0, 50),
-			TextSize = Theme.ts(12),
-			LayoutOrder = i,
-			OnClick = function()
-				Panels.open("Hatch", egg.id)
-			end,
-			Parent = eggs,
-		})
+	local window, body = Panels.create("Pets", "Pets", {
+		width = 520,
+		height = 640,
+		color = Color3.fromRGB(230, 90, 170),
+		subtitle = "Pets make your workshop faster",
+		onOpen = function()
+			closeDetail()
+			M.refreshPets(true)
+		end,
+		onClose = closeDetail,
+	})
+	pets.window = window
+	local top = Theme.make("Frame", { LayoutOrder = 0, Size = UDim2.new(1, 0, 0, 62), BackgroundTransparency = 1, Parent = body })
+	Theme.list(top, 10, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+	Theme.button({ Text = "EQUIP BEST", Color = C.green, Size = UDim2.fromOffset(210, 58), TextSize = 26, LayoutOrder = 1, OnClick = function()
+		Kit.call("EquipBestPets")
+	end, Parent = top })
+	pets.mergeAll = Theme.button({ Text = "MERGE ALL", Color = C.pink, Size = UDim2.fromOffset(210, 58), TextSize = 26, LayoutOrder = 2, OnClick = function()
+		Kit.call("MergeAll")
+	end, Parent = top })
+	pets.bonus = Theme.text({ LayoutOrder = 1, Text = "", Size = UDim2.new(1, 0, 0, 52), TextSize = 22, TextColor3 = C.yellow, Parent = body })
+	pets.empty = Theme.text({ LayoutOrder = 2, Text = "No pets yet! Buy eggs in town.", Size = UDim2.new(1, 0, 0, 60), TextSize = 26, Visible = false, Parent = body })
+	local grid = Theme.make("Frame", { LayoutOrder = 3, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = body })
+	Theme.grid(grid, Vector2.new(112, 104), 8)
+	pets.grid = grid
+	local detail = Theme.make("TextButton", { Name = "Detail", Text = "", AutoButtonColor = false, Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45, Visible = false, ZIndex = 20, Corner = 22, Parent = window })
+	detail.Activated:Connect(closeDetail)
+	pets.detail = detail
+	local card = Theme.card({ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.fromOffset(420, 500), ZIndex = 21, Active = true, Parent = detail })
+	pets.card = card
+	pets.dName = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 40), Position = UDim2.fromOffset(10, 8), TextScaled = true, Parent = card })
+	pets.dStars = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 36), Position = UDim2.fromOffset(10, 50), TextSize = 34, TextColor3 = C.yellow, Parent = card })
+	pets.viewport = Viewport.pet(card, "soot_mole", false, { Size = UDim2.fromOffset(200, 200), Position = UDim2.new(0.5, 0, 0, 92), AnchorPoint = Vector2.new(0.5, 0) })
+	pets.dBonus = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 30), Position = UDim2.fromOffset(10, 296), TextSize = 26, TextColor3 = C.cash, Parent = card })
+	local buttons = Theme.make("Frame", { Size = UDim2.new(1, -20, 0, 66), Position = UDim2.fromOffset(10, 334), BackgroundTransparency = 1, Parent = card })
+	Theme.list(buttons, 10, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+	pets.dEquip = Theme.button({ Text = "EQUIP", Color = C.green, Size = UDim2.fromOffset(180, 62), TextSize = 28, LayoutOrder = 1, OnClick = function()
+		local p, pet = State.profile, pets.current
+		if not p or not pet then return end
+		if isEquipped(p, pet.id) then
+			Kit.call("UnequipPet", pet.id)
+		else
+			Kit.call("EquipPet", pet.id)
+		end
+		closeDetail()
+	end, Parent = buttons })
+	pets.dMerge = Theme.button({ Text = "MERGE", Color = C.pink, Size = UDim2.fromOffset(180, 62), TextSize = 26, LayoutOrder = 2, OnClick = function()
+		local pet = pets.current
+		if pet then
+			local ok = Kit.call("MergePet", pet.id)
+			if ok then closeDetail() end
+		end
+	end, Parent = buttons })
+	pets.dHint = Theme.text({ Text = "", Size = UDim2.new(1, -20, 0, 26), Position = UDim2.fromOffset(10, 408), TextSize = 19, TextColor3 = C.dim, Parent = card })
+	Theme.button({ Text = "RELEASE", Color = C.red, Size = UDim2.fromOffset(150, 46), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 440), TextSize = 20, OnClick = function()
+		local pet = pets.current
+		if pet then
+			local ok = Kit.call("ReleasePet", pet.id)
+			if ok then
+				Toast.show("Bye bye, pet!", "info")
+				closeDetail()
+			end
+		end
+	end, Parent = card })
+	for _, d in card:GetDescendants() do
+		if d:IsA("GuiObject") then d.ZIndex = math.max(d.ZIndex, 22) end
 	end
-	petsList = Theme.scroll({ Name = "Owned", Size = UDim2.new(1, 0, 1, -146), Position = UDim2.new(0, 0, 0, 146), Parent = content })
-	Theme.list(petsList, 6)
 end
 
--- Hatch panel --------------------------------------------------------------------
-local hatchWin, hatchContent
-local hatchEggId
-local hatchUI = {}
-local hatching = false
-local revealedFlag = false
-
-local function refreshHatch()
+function M.refreshPets(force: boolean?)
 	local p = State.profile
-	local egg = Data.egg(hatchEggId)
-	if not egg or not hatchWin or not hatchWin.Visible then return end
-	local coins = p and p.coins or 0
-	local multi = p and p.entitlements and p.entitlements.MultiHatch
-	local tierLocked = math.max(p and p.unlockedTier or 1, p and p.highestTierEver or 1) < (egg.unlockTier or 1)
-	hatchUI.name.Text = egg.name
-	hatchUI.name.TextColor3 = egg.color or C.orange
-	hatchUI.info.Text = string.format("Cost: 🪙 %s per egg   -   Requires material tier %d", Format.abbr(egg.coinCost), egg.unlockTier or 1)
-	for count, b in hatchUI.buttons do
-		local restricted = count > 1 and p and p.paidRandomAllowed == false
-		local locked = count > 1 and not multi
-		b.Text = tierLocked and "Unlock tier " .. tostring(egg.unlockTier) or restricted and "Unavailable" or locked and string.format("Hatch x%d 🔒", count) or string.format("Hatch x%d\n🪙 %s", count, Format.abbr(egg.coinCost * count))
-		Theme.setEnabled(b, not tierLocked and not restricted and (locked or (coins >= egg.coinCost * count and not hatching)))
+	if not p or not pets.window then return end
+	local list = table.clone(p.pets or {})
+	table.sort(list, function(a, b)
+		local ea, eb = isEquipped(p, a.id), isEquipped(p, b.id)
+		if ea ~= eb then return ea end
+		local ra = Data.rarityIndex(Data.companion(a.kind).rarity) + (a.lv or 1) * 0.5
+		local rb = Data.rarityIndex(Data.companion(b.kind).rarity) + (b.lv or 1) * 0.5
+		if ra ~= rb then return ra > rb end
+		return a.id < b.id
+	end)
+	Panels.setTitle(pets.window, string.format("Pets %d/100", #list), string.format("%d of %d equipped", #(p.equipped or {}), p.petSlots or 2))
+	-- Total bonus from equipped pets.
+	local total = {}
+	for _, id in p.equipped or {} do
+		for _, pet in list do
+			if pet.id == id then
+				for k, v in scaledBonus(pet.kind, pet.lv or 1) do
+					total[k] = (total[k] or 0) + v
+				end
+			end
+		end
+	end
+	pets.bonus.Text = "Your pets: " .. Data.bonusText(total)
+	local mergeable = false
+	for _, pet in list do
+		if not Data.companion(pet.kind).premium and (pet.lv or 1) < 5 and copies(p, pet) >= 3 then
+			mergeable = true
+			break
+		end
+	end
+	Theme.setEnabled(pets.mergeAll, mergeable)
+	local key = #list .. ":" .. table.concat(p.equipped or {}, ",")
+	for _, pet in list do
+		key ..= pet.id .. (pet.lv or 1)
+	end
+	if not force and key == pets.key then return end
+	pets.key = key
+	for _, c in pets.grid:GetChildren() do
+		if c:IsA("GuiButton") then c:Destroy() end
+	end
+	pets.empty.Visible = #list == 0
+	for i, pet in list do
+		petCard(pets.grid, pet, i, p)
 	end
 end
+
+-- Hatch panel --------------------------------------------------------------------------------
 
 local function buildHatch()
-	local scroll
-	hatchWin, hatchContent = Panels.create("Hatch", "Hatchery", { onOpen = function(id)
-		hatchEggId = id or (Data.eggs()[1] and Data.eggs()[1].id)
-		hatchUI.rebuildOdds()
-		refreshHatch()
-	end })
-	hatchUI.name = Theme.make("TextLabel", { Text = "", Size = UDim2.new(1, 0, 0, 34), TextSize = Theme.ts(26), Parent = hatchContent })
-	hatchUI.info = Theme.label({ Text = "", Size = UDim2.new(1, 0, 0, 44), Position = UDim2.new(0, 0, 0, 34), TextColor3 = C.dim, TextSize = Theme.ts(13), Parent = hatchContent })
-	local row = Theme.make("Frame", { Size = UDim2.new(1, 0, 0, 56), Position = UDim2.new(0, 0, 1, -56), BackgroundTransparency = 1, Parent = hatchContent })
-	Theme.list(row, 8, Enum.FillDirection.Horizontal)
-	hatchUI.buttons = {}
-	for i, count in { 1, 3, 5 } do
-		hatchUI.buttons[count] = Theme.button({
-			Name = "Hatch" .. count,
-			Text = "",
-			Color = count == 1 and C.orange or Color3.fromRGB(150, 90, 220),
-			Size = UDim2.new(1 / 3, -6, 1, 0),
-			TextSize = Theme.ts(15),
-			LayoutOrder = i,
-			OnClick = function()
-				M.hatch(count)
-			end,
-			Parent = row,
-		})
-	end
-	Theme.label({ Text = "ODDS", Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 82), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.brass, TextSize = 14, Parent = hatchContent })
-	scroll = Theme.scroll({ Size = UDim2.new(1, 0, 1, -170), Position = UDim2.new(0, 0, 0, 108), Parent = hatchContent })
-	Theme.list(scroll, 4)
-	local oddsRows = {}
-	function hatchUI.rebuildOdds()
-		for _, r in oddsRows do
-			r:Destroy()
-		end
-		table.clear(oddsRows)
-		for i, o in Data.eggOdds(hatchEggId) do
-			local color = Data.petRarityColor(o.rarity)
-			local f = Theme.make("Frame", { Size = UDim2.new(1, -8, 0, 30), BackgroundColor3 = C.panel, Corner = 6, LayoutOrder = i, Parent = scroll })
-			Theme.label({ Text = string.format("%s  (%s)", o.name, tostring(o.rarity)), Size = UDim2.new(0.7, 0, 1, 0), Position = UDim2.new(0, 8, 0, 0), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = color, TextSize = Theme.ts(13), TextWrapped = false, Parent = f })
-			Theme.label({ Text = string.format("%.3f%%", o.percent), Size = UDim2.new(0.3, -8, 1, 0), Position = UDim2.new(0.7, 0, 0, 0), TextXAlignment = Enum.TextXAlignment.Right, TextSize = Theme.ts(13), Parent = f })
-			table.insert(oddsRows, f)
-		end
-	end
+	local window, body, footer = Panels.create("Hatch", "Egg", {
+		width = 500,
+		height = 600,
+		footer = 92,
+		color = Color3.fromRGB(255, 120, 200),
+		subtitle = "",
+		onOpen = function(arg)
+			if type(arg) == "string" then eggId = arg end
+			M.refreshHatch(true)
+		end,
+	})
+	hatch.window = window
+	hatch.price = Theme.text({ LayoutOrder = 0, Text = "", Size = UDim2.new(1, 0, 0, 50), TextSize = 40, TextColor3 = C.cash, Parent = body })
+	hatch.lock = Theme.text({ LayoutOrder = 1, Text = "", Size = UDim2.new(1, 0, 0, 30), TextSize = 22, TextColor3 = C.yellow, Parent = body })
+	hatch.list = Theme.make("Frame", { LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = body })
+	Theme.list(hatch.list, 6, nil, Enum.HorizontalAlignment.Center)
+	Theme.list(footer, 10, Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Center)
+	hatch.one = Theme.button({ Text = "HATCH!", Color = C.green, Size = UDim2.fromOffset(220, 84), TextSize = 34, LayoutOrder = 1, OnClick = function()
+		Kit.call("Hatch", eggId, 1)
+	end, Parent = footer })
+	hatch.three = Theme.button({ Text = "x3", Color = C.purple, Size = UDim2.fromOffset(100, 84), TextSize = 30, LayoutOrder = 2, OnClick = function()
+		Kit.call("Hatch", eggId, 3)
+	end, Parent = footer })
+	hatch.five = Theme.button({ Text = "x5", Color = C.purple, Size = UDim2.fromOffset(100, 84), TextSize = 30, LayoutOrder = 3, OnClick = function()
+		Kit.call("Hatch", eggId, 5)
+	end, Parent = footer })
 end
 
--- Hatch reveal ---------------------------------------------------------------------
-local rev = {}
-
-local function buildReveal()
-	local root = Theme.make("Frame", { Name = "HatchReveal", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(10, 6, 5), BackgroundTransparency = 0.15, ClipsDescendants = true, Parent = Panels.layer("Panels") })
-	rev.root = root
-	rev.egg = Theme.make("TextLabel", { Text = "🥚", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 160, 0, 160), TextSize = 120, Parent = root })
-	rev.cards = Theme.scroll({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 12), Size = UDim2.new(0.94, 0, 1, -88), Visible = false, Parent = root })
-	local gl = Instance.new("UIGridLayout")
-	gl.CellSize = UDim2.new(0, Theme.compact() and 110 or 150, 0, Theme.compact() and 150 or 200)
-	gl.CellPadding = UDim2.new(0, 10, 0, 10)
-	gl.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	gl.VerticalAlignment = Enum.VerticalAlignment.Top
-	gl.SortOrder = Enum.SortOrder.LayoutOrder
-	gl.Parent = rev.cards
-	rev.ok = Theme.button({ Name = "Continue", Text = "Awesome!", Color = C.orange, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -20), Size = UDim2.new(0, 200, 0, 52), Visible = false, OnClick = function() Panels.close(true) end, Parent = root })
-	Panels.register("HatchReveal", root, nil, { locked = true, fullscreen = true, noBackdrop = true })
-end
-
-local function showHatched(pets)
-	if type(pets) ~= "table" or #pets == 0 then return end
-	revealedFlag = true
-	for _, c in rev.cards:GetChildren() do
-		if c:IsA("GuiObject") then c:Destroy() end
-	end
-	rev.cards.Visible = false
-	rev.ok.Visible = false
-	rev.egg.Visible = true
-	rev.egg.Text = "🥚"
-	rev.egg.Rotation = 0
-	rev.egg.Size = UDim2.new(0, 160, 0, 160)
-	Panels.open("HatchReveal")
-	task.spawn(function()
-		for i = 1, 8 do
-			Theme.tween(rev.egg, 0.09, { Rotation = (i % 2 == 0 and 1 or -1) * (6 + i * 3) })
-			task.wait(0.1)
-		end
-		rev.egg.Text = "💥"
-		Theme.tween(rev.egg, 0.25, { Size = UDim2.new(0, 260, 0, 260), TextTransparency = 1 })
-		task.wait(0.25)
-		rev.egg.Visible = false
-		rev.egg.TextTransparency = 0
-		rev.cards.Visible = true
-		for i, pet in pets do
-			local kind = pet.k or pet.kind
-			local def = Data.companion(kind)
-			local color = Data.petRarityColor(def.rarity)
-			local card = Theme.make("Frame", { BackgroundColor3 = C.bg, Corner = 12, Stroke = { Color = color, Thickness = 3 }, LayoutOrder = i, Parent = rev.cards })
-			local sc = Instance.new("UIScale")
-			sc.Scale = 0
-			sc.Parent = card
-			local view = Theme.make("Frame", { Size = UDim2.new(1, -12, 0.55, 0), Position = UDim2.new(0, 6, 0, 6), BackgroundColor3 = Color3.fromRGB(24, 19, 17), Corner = 8, Parent = card })
-			Viewport.pet(view, kind, true)
-			Theme.label({ Text = def.name, Size = UDim2.new(1, -8, 0, 36), Position = UDim2.new(0, 4, 0.55, 10), TextColor3 = color, TextSize = Theme.ts(14), Parent = card })
-			Theme.label({ Text = tostring(def.rarity) .. "\n" .. Data.bonusText(def.bonus), Size = UDim2.new(1, -8, 0, 40), Position = UDim2.new(0, 4, 1, -46), TextColor3 = C.dim, TextSize = Theme.ts(11), Parent = card })
-			Theme.tween(sc, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
-			task.wait(0.25)
-		end
-		rev.ok.Visible = true
-	end)
-end
-
-function M.hatch(count: number)
-	if hatching or not hatchEggId then return end
+function M.refreshHatch(force: boolean?)
 	local p = State.profile
-	if count > 1 and p and p.paidRandomAllowed == false then Toast.show("Premium random features are unavailable for this account", "bad") return end
-	if count > 1 and not (p and p.entitlements and p.entitlements.MultiHatch) then
-		Toast.show("Multi-Hatch is a Shop item", "info")
-		Panels.open("Shop")
-		return
+	local egg = Data.egg(eggId)
+	if not p or not egg or not hatch.window then return end
+	Panels.setTitle(hatch.window, egg.name, "Pets help your ore lines and forges")
+	hatch.price.Text = Theme.money(egg.coinCost) .. " each"
+	local tier = math.max(p.unlockedTier or 1, p.highestTierEver or 1)
+	local locked = tier < (egg.unlockTier or 1)
+	hatch.lock.Text = if locked then ("Unlock " .. Data.mat(egg.unlockTier).name .. " to open this egg") else ""
+	hatch.lock.Visible = locked
+	Theme.setEnabled(hatch.one, not locked and (p.coins or 0) >= egg.coinCost)
+	local multi = p.entitlements and p.entitlements.MultiHatch and p.paidRandomAllowed
+	hatch.three.Visible = multi == true
+	hatch.five.Visible = multi == true
+	if multi then
+		Theme.setEnabled(hatch.three, not locked and (p.coins or 0) >= egg.coinCost * 3)
+		Theme.setEnabled(hatch.five, not locked and (p.coins or 0) >= egg.coinCost * 5)
 	end
-	hatching = true
-	revealedFlag = false
-	refreshHatch()
-	local ok, res = Net.call("Hatch", hatchEggId, count)
-	if not ok then
-		Toast.show(res, "bad")
-	else
-		task.wait(0.4) -- the Hatched push normally arrives first
-		if not revealedFlag and type(res) == "table" then
-			showHatched(res.pets)
+	if force or hatch.builtFor ~= eggId then
+		hatch.builtFor = eggId
+		for _, c in hatch.list:GetChildren() do
+			if c:IsA("Frame") then c:Destroy() end
+		end
+		for i, row in Data.eggOdds(eggId) do
+			local def = Data.companion(row.kind)
+			local color = Data.petRarityColor(def.rarity)
+			local card = Theme.card({ LayoutOrder = i, Size = UDim2.new(1, -6, 0, 70), BackgroundColor3 = Theme.shade(color, -0.55), Stroke = { Color = color, Thickness = 3 }, Parent = hatch.list })
+			Viewport.pet(card, row.kind, false, { Size = UDim2.fromOffset(64, 64), Position = UDim2.fromOffset(4, 3) })
+			Theme.text({ Text = def.name, Position = UDim2.fromOffset(74, 4), Size = UDim2.new(1, -170, 0, 30), TextXAlignment = Enum.TextXAlignment.Left, TextScaled = true, Parent = card })
+			Theme.text({ Text = Data.bonusText(def.bonus), Position = UDim2.fromOffset(74, 36), Size = UDim2.new(1, -170, 0, 26), TextXAlignment = Enum.TextXAlignment.Left, TextSize = 18, TextColor3 = C.yellow, Parent = card })
+			Theme.text({ Text = Format.pct(row.percent / 100), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(90, 40), TextSize = 28, TextColor3 = color, Parent = card })
 		end
 	end
-	hatching = false
-	refreshHatch()
 end
 
 function M.init()
 	buildPets()
 	buildHatch()
-	buildReveal()
-	State.observe(function()
-		refreshPets()
-		refreshHatch()
+	Net.on("Hatched", function(info)
+		if type(info) == "table" and info.pets then
+			local list = {}
+			for _, pet in info.pets do
+				table.insert(list, { kind = pet.k or pet.kind, lv = pet.lv or 1 })
+			end
+			Reveal.pets(list)
+			Net.call("EquipBestPets")
+		end
 	end)
-	Net.on("Hatched", function(payload)
-		if type(payload) == "table" then showHatched(payload.pets) end
+	Net.on("Merged", function(info)
+		if type(info) == "table" and info.pets and #info.pets > 0 then
+			local best = info.pets[#info.pets]
+			Reveal.pets({ { kind = best.k or best.kind, lv = best.lv or 2 } }, "MERGED!")
+		end
+	end)
+end
+
+function M.start()
+	State.observe(function()
+		if Panels.isOpen("Pets") and not (pets.detail and pets.detail.Visible) then M.refreshPets() end
+		if Panels.isOpen("Hatch") then M.refreshHatch() end
 	end)
 end
 

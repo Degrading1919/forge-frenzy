@@ -1,10 +1,10 @@
 --!strict
 --[[
-	Blacksmith Evolution (rebirth). Status: PROPOSED FOR PROTOTYPE (docs/06, docs/13).
+	Evolution (rebirth). Status: v2 after the owner playtest (docs/21 §15, docs/22).
 
 	Eligibility at current rank r (one predicate for both normal and protected paths):
-	  * forged since last evolution  >= 150 + 50r
-	  * fresh tier since last evolution >= min(32, 4 + 2r)
+	  * forged since last evolution  >= BaseForges + ForgesPerRank * r
+	  * fresh tier since last evolution >= min(32, BaseTier + TierPerRank * r)
 	"Fresh tier" only counts progress made after the last evolution, so a protected
 	evolution that keeps a high extractor cannot qualify again immediately. It is the larger of:
 	  - the extractor tier, if it was unlocked above the tier held right after the last evolve;
@@ -14,41 +14,54 @@
 
 local Evolution = {}
 
-Evolution.Name = "Blacksmith Evolution"
+Evolution.Name = "Evolution"
+
+-- Requirements (v2, docs/22): forge a batch of weapons and reach a fresh material tier.
+Evolution.BaseForges = 120
+Evolution.ForgesPerRank = 60
+Evolution.BaseTier = 6
+Evolution.TierPerRank = 2
 
 function Evolution.forgeRequirement(rank: number): number
-	return 150 + 50 * rank
+	return Evolution.BaseForges + Evolution.ForgesPerRank * rank
 end
 
 function Evolution.tierRequirement(rank: number): number
-	return math.min(32, 4 + 2 * rank)
+	return math.min(32, Evolution.BaseTier + Evolution.TierPerRank * rank)
 end
 
--- Permanent rewards per rank (additive fractions).
-Evolution.ProductionPerRank = 0.15
+-- Permanent rewards per rank. Cash multiplies every weapon's value (and so display income);
+-- production feeds the capped ore/smelt families; prep shortens heat.
+Evolution.CashPerRank = 0.5
+Evolution.ProductionPerRank = 0.1
 Evolution.PrepPerRank = 0.03
 
--- Profile fields a normal evolution resets (owned by the core economy thread). The value each
--- returns to comes from Shared.Economy.newProfile() when present; `value` is the fallback.
--- Tables are deep-copied on reset. The preview and the reset both read this
--- list, so what the player is shown is exactly what happens.
+function Evolution.cashMultiplier(rank: number): number
+	return 1 + Evolution.CashPerRank * math.max(0, rank)
+end
+
+-- Profile fields a normal evolution resets. The value each returns to comes from
+-- Shared.Economy.newProfile() when present; `value` is the fallback. Tables are deep-copied.
+-- The preview and the reset both read this list, so what the player is shown is exactly what
+-- happens. Build pads, displays, weapons, pets and gear are kept (Evolution.Keeps).
 Evolution.Resets = {
-	{ field = "coins", label = "Coins", value = 0 },
-	{ field = "ore", label = "Raw ore", value = {} },
+	{ field = "coins", label = "Cash", value = 0 },
 	{ field = "ingots", label = "Ingots", value = {} },
-	{ field = "progress", label = "Partly mined ore and partly smelted ingots", value = { ore = 0, smelt = 0 } },
-	{ field = "unlockedTier", label = "Extractor tier (materials stay in your catalog)", value = 1 },
-	{ field = "levels", label = "Machine upgrade levels", value = {} },
-	{ field = "selectedMaterial", label = "Selected material (back to Copper)", value = 1 },
+	{ field = "unlockedTier", label = "Materials (back to Copper)", value = 1 },
+	{ field = "levels", label = "Machine upgrades", value = {} },
+	{ field = "lines", label = "Ore line materials", value = {} },
+	{ field = "stations", label = "Forge recipes", value = {} },
+	{ field = "selectedMaterial", label = "Selected material", value = 1 },
+	{ field = "bank", label = "Uncollected display cash", value = 0 },
 }
 
+-- Short labels for the KEEP column of the evolution screen.
 Evolution.Keeps = {
-	"Weapon collection, showcase and discovery journal",
-	"Companions and equipped companions",
-	"Game passes and purchases",
-	"Blacksmith gear",
-	"Lifetime stats and leaderboard records",
-	"Evolution rank and all evolution bonuses",
+	"Weapons & displays",
+	"Workshop buildings",
+	"Pets",
+	"Tools (gear)",
+	"Passes",
 }
 
 --[[

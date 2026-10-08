@@ -124,7 +124,7 @@ end
 tests["failed hatches change nothing"] = function()
 	local cases = {
 		{ profile({ coins = 100, unlockedTier = 3 }), "hearth", 1, false }, -- too poor
-		{ profile({ coins = 1e9, unlockedTier = 2 }), "hearth", 1, false }, -- locked
+		{ profile({ coins = 1e9, unlockedTier = 1 }), "hearth", 1, false }, -- locked (Hearth opens at Tin)
 		{ profile({ coins = 1e9, unlockedTier = 3 }), "hearth", 3, false }, -- no multi pass
 		{ profile({ coins = 1e9, unlockedTier = 3 }), "hearth", 2, true }, -- bad count
 		{ profile({ coins = 1e9, unlockedTier = 3 }), "nope", 1, false }, -- unknown egg

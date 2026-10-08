@@ -1,398 +1,367 @@
 --!nonstrict
--- Cheap, distance-culled machine animation on all plots.
+--[[
+	Workshop machines in motion (v2, docs/21 §7-10). Client-only presentation.
+
+	Every workshop: drills spin while mining, ore chunks ride the raised belt up and drop into
+	the smelter, glowing ingots ride the output belt into the vault, ore gems take the color of
+	the metal each line mines, and red lasers seal a workshop while its Forge Lock is on.
+	Your workshop also gets big billboards: what each forge is doing (with a countdown), what
+	each drill mines, build pad prices, cash waiting in the collector and the lock timer.
+]]
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 
 local Common = require(script.Parent.WorldUtil.Common)
 local State = Common.State
+local UI = Common.Client.UI
+local Theme = require(UI.Theme)
+local Data = require(UI.Data)
+local Format = require(UI.Format)
 
 local WorldMachines = { Priority = 0 }
+local C = Theme.Colors
 
-local CULL = 160
-local DEFAULT_RATE = 1.5
-local DEFAULT_ORE = Color3.fromRGB(190, 140, 90)
-local MOLTEN_A = Color3.fromRGB(255, 170, 60)
-local MOLTEN_B = Color3.fromRGB(255, 80, 20)
-local N_CUBES = 6
+local plotsState = {} -- [plot] = { visual, lines = { [i] = { acc } }, lockedVisible }
+local movers = {} -- moving ore/ingot parts
+local pool = {}
+local billboards = {} -- [key] = gui
+local phaseInfo = {} -- [station] = ForgePhase push
 
-local plotData = {} -- [plot] = data
-local t = 0
-local refreshVisual
-
-local GOLD = Color3.fromRGB(222, 176, 73)
-local DRAGON = Color3.fromRGB(150, 68, 45)
-
--- track -> { machine, anchor part, orbit radius, light color }
-local UPGRADES = {
-	ExtractorOutput = { "Extractor", "TierGem", 3.2, Color3.fromRGB(190, 120, 255) },
-	SmelterSpeed = { "Smelter", "Molten", 3.6, Color3.fromRGB(255, 150, 60) },
-	StorageCapacity = { "Storage", "Sign", 4.2, Color3.fromRGB(255, 220, 120) },
-	FurnaceHeat = { "Furnace", "Dome", 5.5, Color3.fromRGB(255, 110, 40) },
-	AnvilFinish = { "Anvil", "Face", 3.4, Color3.fromRGB(255, 240, 200) },
-}
-
-local function scan(plot)
-	local machines = plot:FindFirstChild("Machines")
-	if not machines then
+local function decodeVisual(plot)
+	local raw = plot:GetAttribute("VisualState")
+	if type(raw) ~= "string" or raw == "" then
 		return nil
 	end
-	local d = { plot = plot, ang = 0, cubePhase = 0, fillH = 0.4, orbs = {}, levels = {}, accents = {} }
-	local ok, cf = pcall(function()
-		return plot:GetPivot()
-	end)
-	d.center = ok and cf.Position or Vector3.zero
-	local ex = machines:FindFirstChild("Extractor")
-	if ex then
-		d.exModel = ex
-		d.gear = ex:FindFirstChild("Gear")
-		d.bit = ex:FindFirstChild("DrillBit")
-		d.shaft = ex:FindFirstChild("DrillShaft")
-		d.gem = ex:FindFirstChild("TierGem")
-		d.gearCF = d.gear and d.gear.CFrame
-		d.bitCF = d.bit and d.bit.CFrame
-		d.shaftCF = d.shaft and d.shaft.CFrame
-		d.gemColor0 = d.gem and d.gem.Color
-	end
-	local sm = machines:FindFirstChild("Smelter")
-	if sm then
-		d.molten = sm:FindFirstChild("Molten")
-		d.mouth = sm:FindFirstChild("Mouth")
-		d.mouthLight = d.mouth and d.mouth:FindFirstChildOfClass("PointLight")
-		d.mouthBright0 = d.mouthLight and d.mouthLight.Brightness
-	end
-	local st = machines:FindFirstChild("Storage")
-	local fill = st and st:FindFirstChild("Fill")
-	if fill then
-		d.fill = fill
-		d.fillCF = fill.CFrame
-		d.fillSize = fill.Size
-		d.fillMax = fill:GetAttribute("MaxHeight") or 9.6
-		d.fillColor0 = fill.Color
-	end
-	local belt = plot:FindFirstChild("Belt")
-	local a0 = belt and belt:FindFirstChild("BeltStart")
-	local a1 = belt and belt:FindFirstChild("BeltEnd")
-	if a0 and a1 then
-		d.beltA, d.beltB = a0.WorldPosition, a1.WorldPosition
-	end
-	for _, machine in machines:GetChildren() do
-		for _, piece in machine:GetChildren() do
-			local name = piece.Name
-			if piece:IsA("BasePart") and (name == "Base" or name == "DrillHousing" or name == "TopFrame" or name == "Dome" or name == "Stack" or name == "Face") then
-				table.insert(d.accents, { part = piece, machine = machine.Name, name = name, color = piece.Color, material = piece.Material })
-			end
-		end
-	end
-	return d
+	local ok, res = pcall(HttpService.JSONDecode, HttpService, raw)
+	return ok and res or nil
 end
 
-local function ensureScanned()
-	local plots = Common.plotsFolder()
-	if not plots then
-		return
+local function takePart(): BasePart
+	local p = table.remove(pool)
+	if not p then
+		p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Material = Enum.Material.SmoothPlastic
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
 	end
-	for _, plot in plots:GetChildren() do
-		if not plotData[plot] then
-			local d = scan(plot)
-			plotData[plot] = d
-			if d then
-				local function changed()
-					local raw = plot:GetAttribute("VisualState")
-					local ok, public = pcall(HttpService.JSONDecode, HttpService, type(raw) == "string" and raw ~= "" and raw or "{}")
-					d.public = ok and type(public) == "table" and public or nil
-					if refreshVisual then refreshVisual(d) end
+	p.Parent = Common.fxFolder()
+	return p
+end
+
+local function givePart(p: BasePart)
+	p.Parent = nil
+	if #pool < 120 then
+		table.insert(pool, p)
+	else
+		p:Destroy()
+	end
+end
+
+-- Spawns an item that travels a -> b over `duration`, then optionally drops `fall` studs.
+local function launch(a: Vector3, b: Vector3, duration: number, color: Color3, size: Vector3, neon: boolean, fall: number?)
+	if #movers > 150 then return end
+	local p = takePart()
+	p.Size = size
+	p.Color = color
+	p.Material = if neon then Enum.Material.Neon else Enum.Material.Slate
+	p.CFrame = CFrame.new(a)
+	table.insert(movers, { part = p, a = a, b = b, t = 0, d = duration, fall = fall or 0 })
+end
+
+local function billboard(key: string, adornee: Instance, size: Vector2, offset: Vector3, maxDistance: number?)
+	local gui = billboards[key]
+	if gui and gui.Parent and gui.Adornee == adornee then
+		return gui
+	end
+	if gui then gui:Destroy() end
+	gui = Instance.new("BillboardGui")
+	gui.Name = "FF_" .. key
+	gui.Adornee = adornee
+	-- Sized in studs so labels stay in proportion to the world instead of covering the screen.
+	gui.Size = UDim2.new(size.X / 30, 0, size.Y / 30, 0)
+	gui.StudsOffset = offset
+	gui.AlwaysOnTop = false
+	gui.MaxDistance = maxDistance or 90
+	gui.LightInfluence = 0
+	local label = Theme.text({ Name = "Text", Text = "", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.panelDark, BackgroundTransparency = 0.1, Corner = 14, Stroke = { Color = C.ink, Thickness = 3 }, TextScaled = true, Parent = gui })
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.PaddingRight = UDim.new(0, 8)
+	pad.Parent = label
+	gui.Parent = Common.player:WaitForChild("PlayerGui")
+	billboards[key] = gui
+	return gui
+end
+
+local function setBoard(key: string, text: string, color: Color3?)
+	local gui = billboards[key]
+	if gui then
+		gui.Text.Text = text
+		gui.Text.BackgroundColor3 = color or C.panelDark
+	end
+end
+
+local function dropBoard(key: string)
+	if billboards[key] then
+		billboards[key]:Destroy()
+		billboards[key] = nil
+	end
+end
+
+-- Per-plot animation ------------------------------------------------------------------------
+
+local function stepPlot(plot: Instance, dt: number, now: number)
+	local st = plotsState[plot]
+	if not st then
+		st = { lines = {}, lasersOn = nil }
+		plotsState[plot] = st
+	end
+	local owned = (plot:GetAttribute("OwnerUserId") or 0) ~= 0
+	local visual = if owned then decodeVisual(plot) else nil
+	local machines = plot:FindFirstChild("Machines")
+	if machines then
+		for _, model in machines:GetChildren() do
+			local index = model:GetAttribute("LineIndex")
+			if index then
+				local m = visual and visual.lines and visual.lines[index]
+				local drill = model:FindFirstChild("Drill")
+				local smelter = model:FindFirstChild("Smelter")
+				local belt = model:FindFirstChild("OreBelt")
+				local out = model:FindFirstChild("OutBelt")
+				local color = if m then Data.mat(m).color else C.grey
+				local gem = drill and drill:FindFirstChild("OreGem")
+				if gem and gem.Color ~= color then
+					gem.Color = color
 				end
-				plot:GetAttributeChangedSignal("VisualState"):Connect(changed)
-				plot:GetAttributeChangedSignal("OwnerUserId"):Connect(changed)
-				changed()
-			end
-		end
-	end
-end
-
-local function ensureCubes(d)
-	if d.cubes or not d.beltA then
-		return
-	end
-	d.cubes = {}
-	for i = 1, N_CUBES do
-		local c = Instance.new("Part")
-		c.Name = "OreCube"
-		c.Size = Vector3.new(0.9, 0.9, 0.9)
-		c.Anchored = true
-		c.CanCollide = false
-		c.CanQuery = false
-		c.CanTouch = false
-		c.CastShadow = false
-		c.Material = Enum.Material.Slate
-		c.Color = DEFAULT_ORE
-		d.cubes[i] = c
-	end
-end
-
-local function setCubesVisible(d, on)
-	if not d.cubes then
-		return
-	end
-	if on and not d.cubesShown then
-		local f = Common.fxFolder()
-		for _, c in d.cubes do
-			c.Parent = f
-		end
-		d.cubesShown = true
-	elseif not on and d.cubesShown then
-		for _, c in d.cubes do
-			c.Parent = nil
-		end
-		d.cubesShown = false
-	end
-end
-
-local function clearOrbs(d, track)
-	local list = d.orbs[track]
-	if list then
-		for _, o in list do
-			if type(o) == "table" and o.part then
-				o.part:Destroy()
-			end
-		end
-	end
-	d.orbs[track] = nil
-end
-
--- Decorative accent for a machine track level: extra light + orbiting glow balls.
-local function applyTrack(d, track, level)
-	local cfg = UPGRADES[track]
-	local machines = d.plot:FindFirstChild("Machines")
-	local model = machines and machines:FindFirstChild(cfg[1])
-	local anchor = model and model:FindFirstChild(cfg[2])
-	if not anchor then
-		return
-	end
-	local light = anchor:FindFirstChild("UpgradeGlow")
-	if level <= 0 then
-		if light then
-			light:Destroy()
-		end
-		clearOrbs(d, track)
-		return
-	end
-	if not light then
-		light = Instance.new("PointLight")
-		light.Name = "UpgradeGlow"
-		light.Color = cfg[4]
-		light.Parent = anchor
-	end
-	light.Brightness = math.min(6, 0.6 + level * 0.3)
-	light.Range = 12 + math.min(16, level)
-	local rings = math.min(3, 1 + math.floor(level / 5))
-	local have = d.orbs[track]
-	if have and have.rings == rings then
-		return
-	end
-	clearOrbs(d, track)
-	local list = { rings = rings }
-	for r = 1, rings do
-		for k = 1, 4 do
-			local p = Instance.new("Part")
-			p.Name = "UpgradeOrb"
-			p.Shape = Enum.PartType.Ball
-			p.Size = Vector3.new(0.5, 0.5, 0.5)
-			p.Material = Enum.Material.Neon
-			p.Color = cfg[4]
-			p.Anchored = true
-			p.CanCollide = false
-			p.CanQuery = false
-			p.CanTouch = false
-			p.CastShadow = false
-			local angle = k * math.pi / 2 + r
-			p.Position = anchor.Position + Vector3.new(math.cos(angle) * cfg[3], (r - 1) * 0.9, math.sin(angle) * cfg[3])
-			p.Parent = model
-			table.insert(list, { part = p, ring = r, k = k })
-		end
-	end
-	list.center = anchor.Position
-	list.radius = cfg[3]
-	d.orbs[track] = list
-end
-
-local function visualProfile(d)
-	if (d.plot:GetAttribute("OwnerUserId") or 0) == 0 then return nil end
-	if d.plot == Common.myPlot() then return State.profile end
-	local public = d.public
-	return public and public.ownerUserId == d.plot:GetAttribute("OwnerUserId") and public or nil
-end
-
-refreshVisual = function(d)
-	local profile = visualProfile(d)
-	local levels = profile and profile.levels or {}
-	local passes = profile and profile.entitlements or {}
-	local gear = profile and profile.gear or {}
-	local parts = {}
-	for track in UPGRADES do
-		table.insert(parts, tostring(levels[track] or 0))
-	end
-	for _, key in { "TitanExcavator", "DragonFurnace", "VIPWorkshop" } do table.insert(parts, tostring(passes[key] == true)) end
-	table.insert(parts, tostring(gear.Hammer or 0))
-	table.insert(parts, tostring(profile and profile.selectedMaterial or 0))
-	local sig = table.concat(parts, ",")
-	if sig == d.visualSig then return end
-	d.visualSig = sig
-	-- Material identity is replicated appearance, even outside the animation culling radius
-	-- or when Studio/headless clients do not render frames. Only motion needs RenderStepped.
-	local materialColor = profile and Common.materialColor(profile.selectedMaterial) or nil
-	if d.gem then d.gem.Color = materialColor or d.gemColor0 end
-	if d.fill then d.fill.Color = materialColor or d.fillColor0 end
-	for track in UPGRADES do applyTrack(d, track, levels[track] or 0) end
-	for _, accent in d.accents do
-		local color, material = accent.color, accent.material
-		if passes.VIPWorkshop and accent.name == "Base" then
-			color, material = GOLD:Lerp(accent.color, 0.35), Enum.Material.Metal
-		elseif passes.TitanExcavator and accent.machine == "Extractor" and accent.name ~= "Base" then
-			color, material = GOLD, Enum.Material.Metal
-		elseif passes.DragonFurnace and accent.machine == "Furnace" and accent.name ~= "Base" then
-			color, material = DRAGON, Enum.Material.Metal
-		elseif accent.machine == "Anvil" and accent.name == "Face" then
-			color = accent.color:Lerp(GOLD, math.clamp((gear.Hammer or 0) / 20, 0, 0.45))
-		end
-		accent.part.Color, accent.part.Material = color, material
-	end
-end
-
-local function onProfile(profile)
-	ensureScanned()
-	for _, d in plotData do refreshVisual(d) end
-end
-
-local function step(dt)
-	t += dt
-	local camPos = Common.camPos()
-	if not camPos then
-		return
-	end
-	local profile = State.profile
-	local vfx = Common.vfx()
-	local myPlot = Common.myPlot()
-	local pulse = 0.5 + 0.5 * math.sin(t * 4)
-
-	for plot, d in plotData do
-		if (d.center - camPos).Magnitude > CULL then
-			setCubesVisible(d, false)
-			for _, list in d.orbs do
-				for _, orb in list do
-					if type(orb) == "table" then orb.part.Transparency = 1 end
+				local bit = drill and drill:FindFirstChild("DrillBit")
+				if bit and m then
+					bit.CFrame = bit.CFrame * CFrame.Angles(dt * 8, 0, 0)
 				end
+				if m and belt and out and smelter then
+					local ls = st.lines[index] or { acc = math.random() }
+					st.lines[index] = ls
+					local rate = math.clamp((visual.rates and visual.rates.orePerSec or 0.3), 0.2, 1.5)
+					ls.acc += dt * rate
+					if ls.acc >= 1 then
+						ls.acc -= 1
+						local a = belt.BeltStart.WorldPosition
+						local b = belt.BeltEnd.WorldPosition
+						launch(a, b, 1.6, color, Vector3.new(0.9, 0.9, 0.9), false, 2.2)
+						task.delay(2.2, function()
+							if out.Parent then
+								launch(out.BeltStart.WorldPosition, out.BeltEnd.WorldPosition, 1.8, color, Vector3.new(1.3, 0.45, 0.7), true, 0)
+							end
+						end)
+					end
+				end
+			end
+		end
+	end
+	-- Forge Lock lasers (everyone sees them).
+	local lockedUntil = plot:GetAttribute("LockedUntil") or 0
+	local locked = lockedUntil > now
+	local lasers = plot:FindFirstChild("Lasers")
+	if lasers then
+		if locked then
+			local flicker = 0.15 + 0.1 * math.sin(now * 10)
+			for _, laser in lasers:GetChildren() do
+				laser.Transparency = flicker
+			end
+		elseif st.lasersOn ~= false then
+			for _, laser in lasers:GetChildren() do
+				laser.Transparency = 1
+			end
+		end
+		st.lasersOn = locked
+	end
+end
+
+-- Your workshop's billboards -------------------------------------------------------------
+
+local function forgeText(index: number, p: any, now: number): (string, Color3)
+	local st = p.forgeStatus and p.forgeStatus[index]
+	local info = phaseInfo[index]
+	local recipe = p.stations and p.stations[index]
+	local name = if recipe then (Data.mat(recipe.m).name .. " " .. Data.ClassNames[recipe.c]) else ""
+	if st and st.auto then
+		local remain = math.max(0, ((info and info.endsAt) or st.endsAt or 0) - now)
+		local phase = (info and info.phase) or st.phase
+		if st.waiting or phase == "waiting" then
+			return "AUTO ⏳ waiting for ingots", C.orange
+		elseif phase == "heat" then
+			return string.format("AUTO 🔥 %.1fs\n%s", remain, name), Theme.shade(C.green, -0.3)
+		elseif phase == "strike" then
+			return string.format("AUTO 🔨 %.1fs\n%s", remain, name), Theme.shade(C.green, -0.3)
+		end
+		return "AUTO 💧\n" .. name, Theme.shade(C.green, -0.3)
+	end
+	if info and info.mode == "manual" and (info.phase == "heat" or info.phase == "strike") then
+		return "🔨 HAMMERING!", C.orange
+	end
+	return "READY! Walk up & forge\n" .. name, C.blue
+end
+
+local function updateMine(now: number)
+	local p = State.profile
+	local plot = Common.myPlot()
+	if not p or not plot then return end
+	local machines = plot:FindFirstChild("Machines")
+	if machines then
+		for _, model in machines:GetChildren() do
+			local forgeIndex = model:GetAttribute("ForgeIndex")
+			local lineIndex = model:GetAttribute("LineIndex")
+			if forgeIndex and p.stations and p.stations[forgeIndex] then
+				local key = "forge" .. forgeIndex
+				billboard(key, model:FindFirstChild("Base") or model.PrimaryPart, Vector2.new(250, 80), Vector3.new(0, 12, 0), 120)
+				local text, color = forgeText(forgeIndex, p, now)
+				setBoard(key, text, color)
+			elseif lineIndex and p.lines and p.lines[lineIndex] then
+				local drill = model:FindFirstChild("Drill")
+				if drill then
+					local key = "line" .. lineIndex
+					billboard(key, drill:FindFirstChild("Base") or drill.PrimaryPart, Vector2.new(220, 60), Vector3.new(0, 17, 0), 120)
+					local m = p.lines[lineIndex].m
+					setBoard(key, string.format("⛏️ %s  %s", Data.mat(m).name, Format.rate(math.min(p.rates.orePerSec, p.rates.ingotPerSec))), Theme.shade(Data.mat(m).color, -0.45))
+				end
+			end
+		end
+	end
+	-- Build pads in view.
+	local pads = plot:FindFirstChild("BuildPads")
+	local seen = {}
+	if pads then
+		local cfg = Common.config("BuildPads")
+		for _, pad in pads:GetChildren() do
+			local padId = pad:GetAttribute("PadId")
+			local def = cfg and cfg.ById and padId and cfg.ById[padId]
+			if def then
+				local key = "pad" .. padId
+				seen[key] = true
+				billboard(key, pad, Vector2.new(230, 76), Vector3.new(0, 4, 0), 90)
+				local afford = (p.coins or 0) >= def.cost
+				setBoard(key, string.format("🏗️ %s\n%s", def.name, Theme.money(def.cost)), if afford then Theme.shade(C.green, -0.25) else C.panelDark)
+				pad.Transparency = 0.15 + 0.2 * (0.5 + 0.5 * math.sin(now * 3))
+			end
+		end
+	end
+	for key in billboards do
+		if key:sub(1, 3) == "pad" and not seen[key] then
+			dropBoard(key)
+		end
+	end
+	-- Collector.
+	local collector = plot:FindFirstChild("Collector")
+	if collector then
+		billboard("collector", collector, Vector2.new(220, 70), Vector3.new(0, 4.5, 0), 120)
+		local bank = p.bank or 0
+		if (p.incomePerSec or 0) > 0 then
+			bank += 0 -- server value; the collector shows what is waiting
+		end
+		setBoard("collector", string.format("💰 %s\nstep here!", Theme.money(bank)), if bank >= 1 then Theme.shade(C.green, -0.2) else C.panelDark)
+	end
+	-- Lock button.
+	local lock = plot:FindFirstChild("LockButton")
+	if lock then
+		billboard("lock", lock, Vector2.new(200, 60), Vector3.new(0, 6, 0), 120)
+		local lockedUntil = plot:GetAttribute("LockedUntil") or 0
+		local nextLock = plot:GetAttribute("NextLockAt") or 0
+		if lockedUntil > now then
+			setBoard("lock", string.format("🔒 LOCKED %ds", math.ceil(lockedUntil - now)), C.red)
+		elseif nextLock > now then
+			setBoard("lock", string.format("Recharging %ds", math.ceil(nextLock - now)), C.grey)
+		else
+			setBoard("lock", "🔒 LOCK FORGE", Theme.shade(C.red, -0.2))
+		end
+	end
+	-- Vault bins board.
+	local storage = machines and machines:FindFirstChild("Storage")
+	local board = storage and storage:FindFirstChild("BinBoard")
+	local gui = board and board:FindFirstChild("Bins")
+	if gui then
+		local label = gui:FindFirstChild("Text")
+		if not label then
+			label = Theme.text({ Name = "Text", Size = UDim2.new(1, 0, 1, 0), TextScaled = true, Parent = gui })
+		end
+		local parts = {}
+		local fullest = 0
+		for m = p.unlockedTier or 1, 1, -1 do
+			local n = p.ingots and p.ingots[m] or 0
+			if n > 0 and #parts < 3 then
+				table.insert(parts, string.format("%s %s", Data.mat(m).name, Theme.abbr(n)))
+			end
+			fullest = math.max(fullest, n / math.max(1, p.rates.capacity))
+		end
+		label.Text = if #parts > 0 then table.concat(parts, "  ·  ") else "EMPTY"
+		local fill = storage:FindFirstChild("Fill")
+		if fill then
+			local h = math.max(0.05, (fill:GetAttribute("MaxHeight") or 4) * math.clamp(fullest, 0, 1))
+			local base = fill:GetAttribute("BaseY")
+			if not base then
+				base = fill.Position.Y - fill.Size.Y / 2
+				fill:SetAttribute("BaseY", base)
+			end
+			fill.Size = Vector3.new(fill.Size.X, h, fill.Size.Z)
+			fill.CFrame = fill.CFrame - fill.CFrame.Position + Vector3.new(fill.Position.X, base + h / 2, fill.Position.Z)
+		end
+	end
+end
+
+local function step(dt: number)
+	local now = workspace:GetServerTimeNow()
+	-- Movers.
+	for i = #movers, 1, -1 do
+		local mv = movers[i]
+		mv.t += dt
+		local f = mv.t / mv.d
+		if f >= 1 then
+			if mv.fall > 0 and f < 1 + 0.35 / mv.d then
+				local fallT = (mv.t - mv.d) / 0.35
+				mv.part.CFrame = CFrame.new(mv.b - Vector3.new(0, mv.fall * fallT * fallT, 0))
+			else
+				givePart(mv.part)
+				table.remove(movers, i)
 			end
 		else
-			local own = plot == myPlot and profile ~= nil
-			local visual = visualProfile(d)
-			local owned = own or (plot:GetAttribute("OwnerUserId") or 0) ~= 0
-			local rate = DEFAULT_RATE
-			if visual and visual.rates and visual.rates.orePerSec then
-				rate = visual.rates.orePerSec
-			elseif not owned then
-				rate = 0.1
-			end
-			local speed = math.clamp(0.5 + math.sqrt(math.max(rate, 0)) * 1.1, 0.5, 7)
-			d.ang += dt * speed
-			local matColor = visual and Common.materialColor(visual.selectedMaterial) or nil
-
-			-- Extractor
-			if d.gear and d.gear.Parent then
-				d.gear.CFrame = CFrame.new(d.gearCF.Position) * CFrame.Angles(0, d.ang, 0) * d.gearCF.Rotation
-			end
-			local bob = math.sin(d.ang * 2.2) * 0.35
-			if d.bit and d.bit.Parent then
-				d.bit.CFrame = CFrame.new(d.bitCF.Position + Vector3.new(0, bob, 0)) * CFrame.Angles(0, d.ang * 3, 0) * d.bitCF.Rotation
-			end
-			if d.shaft and d.shaft.Parent then
-				d.shaft.CFrame = d.shaftCF + Vector3.new(0, bob, 0)
-			end
-			if d.gem and d.gem.Parent then
-				local target = matColor or d.gemColor0
-				if target and d.gem.Color ~= target then
-					d.gem.Color = d.gem.Color:Lerp(target, math.min(1, dt * 6))
-				end
-			end
-
-			-- Smelter
-			if d.molten and d.molten.Parent then
-				d.molten.Color = MOLTEN_A:Lerp(MOLTEN_B, pulse)
-				d.molten.Transparency = (owned and 0 or 0.5) + 0.12 * pulse
-			end
-			if d.mouthLight and d.mouthBright0 then
-				d.mouthLight.Brightness = d.mouthBright0 * (owned and (0.75 + 0.5 * pulse) or 0.3)
-			end
-
-			-- Storage fill
-			if d.fill and d.fill.Parent then
-				local frac = 0.4
-				if own and profile.rates and profile.rates.capacity and profile.rates.capacity > 0 then
-					frac = math.min(1, Common.sumArray(profile.ingots) / profile.rates.capacity)
-				elseif not owned then
-					frac = 0.05
-				end
-				local target = frac * d.fillMax
-				d.fillH += (target - d.fillH) * math.min(1, dt * 3)
-				local h = math.max(0.01, d.fillH)
-				d.fill.Size = Vector3.new(d.fillSize.X, h, d.fillSize.Z)
-				d.fill.CFrame = d.fillCF * CFrame.new(0, (h - d.fillSize.Y) / 2, 0)
-				local tc = matColor or d.fillColor0
-				if d.fill.Color ~= tc then
-					d.fill.Color = d.fill.Color:Lerp(tc, math.min(1, dt * 5))
-				end
-			end
-
-			-- Belt cubes
-			if d.beltA and vfx and owned then
-				ensureCubes(d)
-				setCubesVisible(d, true)
-				d.cubePhase = (d.cubePhase + dt * (0.08 + speed * 0.035)) % 1
-				local col = matColor or DEFAULT_ORE
-				for i, c in d.cubes do
-					local p = (d.cubePhase + (i - 1) / N_CUBES) % 1
-					c.Position = d.beltA:Lerp(d.beltB, p) + Vector3.new(0, 0.45, 0)
-					if c.Color ~= col then
-						c.Color = col
-					end
-				end
-			else
-				setCubesVisible(d, false)
-			end
-
-			-- Upgrade orbs
-			for _, list in d.orbs do
-				for _, o in list do
-					if type(o) == "table" then
-						o.part.Transparency = vfx and 0 or 1
-						if vfx then
-							local dir = (o.ring % 2 == 0) and -1 or 1
-							local a = t * 1.2 * dir + o.k * math.pi / 2 + o.ring
-							local r = list.radius + (o.ring - 1) * 0.6
-							o.part.Position = list.center + Vector3.new(math.cos(a) * r, 0.9 * (o.ring - 1) + math.sin(t * 2 + o.k) * 0.15, math.sin(a) * r)
-						end
-					end
-				end
-			end
+			local pos = mv.a:Lerp(mv.b, f)
+			mv.part.CFrame = CFrame.lookAt(pos, mv.b) * CFrame.Angles(0, mv.t * 3, 0)
 		end
 	end
 end
 
+local acc = 0
 function WorldMachines.start()
-	local plots = nil
-	while not plots do
-		plots = Common.plotsFolder()
-		if not plots then
-			task.wait(1)
+	local Net = require(Common.Client.Net)
+	Net.on("ForgePhase", function(info)
+		if type(info) == "table" and info.station then
+			phaseInfo[info.station] = info
 		end
-	end
-	ensureScanned()
-	plots.ChildAdded:Connect(function()
-		task.defer(ensureScanned)
 	end)
-	State.observe(onProfile)
-	RunService.RenderStepped:Connect(step)
+	RunService.Heartbeat:Connect(function(dt)
+		step(dt)
+		acc += dt
+		if acc < 0.1 then return end
+		local frame = acc
+		acc = 0
+		local now = workspace:GetServerTimeNow()
+		local plots = Common.plotsFolder()
+		if plots then
+			for _, plot in plots:GetChildren() do
+				local ok, err = pcall(stepPlot, plot, frame, now)
+				if not ok then
+					warn("[WorldMachines]", err)
+				end
+			end
+		end
+		local ok, err = pcall(updateMine, now)
+		if not ok then
+			warn("[WorldMachines] mine", err)
+		end
+	end)
 end
 
 return WorldMachines

@@ -2,32 +2,48 @@
 --[[
 	Economy — pure, synchronous rules that read and mutate a player's profile table.
 
-	Services (DataService, ProductionService, ForgeService, UpgradeService) own sessions, timers
-	and Roblox APIs; every rule that touches coins, ore, ingots, levels or weapons lives here so it
-	is testable without Studio. Nothing in this module yields, so each call is atomic on the server.
+	Services own sessions, timers and Roblox APIs; every rule that touches cash, ingots, levels,
+	weapons, pads or displays lives here so it is testable without Studio. Nothing in this module
+	yields, so each call is atomic on the server.
 
 	Functions that can fail return (ok: boolean, resultOrError). Error codes are short strings
-	the UI can map to messages.
+	the network adapter maps to friendly messages.
 
-	Bonuses: services pass a `Bonuses` table ({ extract, smelt, prep, storage } fractions, e.g.
-	0.3 = +30%) summed from companions, evolution and premium entitlements. Each family is
-	capped at Balance.production.maxConfiguredProductionFamilyMultiplier (3x) in total.
+	v2 workshop model (docs/22):
+	  * Ore lines. Each owned line (drill + smelter) mines its own chosen material. Its drill
+	    fills a small ore buffer on the conveyor; its smelter turns that ore into ingots in the
+	    storage vault, which has one bin per material. A line stalls when its buffer or its
+	    material's bin is full, so leftover old ingots never block a new material.
+	  * Forge stations. Each owned forge has its own recipe (material + weapon type) and its own
+	    automatic keep rule. Recipes consume ingots by weapon size (Config/Balance).
+	  * Every forged weapon goes straight into the backpack (auto modes may sell low rarities
+	    instead). Ordinary selling happens at the hub sell booth.
+	  * Display podiums earn passive cash into the workshop collector.
+
+	Bonuses: services pass a `Bonuses` table ({ extract, smelt, prep, storage } fractions) summed
+	from companions, evolution and premium entitlements. Each family is capped at
+	Balance.production.maxConfiguredProductionFamilyMultiplier (3x) in total.
 ]]
 
 local Config = script.Parent.Config
 local Balance = require(Config.Balance)
 local Materials = require(Config.Materials)
+local BuildPads = require(Config.BuildPads)
 local ForgeMath = require(script.Parent.ForgeMath)
 
 local Economy = {}
 
-Economy.SCHEMA_VERSION = 1
+Economy.SCHEMA_VERSION = 2
 Economy.MATERIAL_COUNT = #Materials
--- PROPOSED: Copper ingots granted on a fresh profile so the first forge needs no waiting.
-Economy.STARTER_INGOTS = 3
+-- Copper ingots granted on a fresh profile so the first forges need no waiting.
+Economy.STARTER_INGOTS = 6
+-- The starter recipe: Copper Dagger (one ingot), so a brand-new player forges at once.
+Economy.STARTER_CLASS = 4
 
 export type Bonuses = { extract: number, smelt: number, prep: number, storage: number }
 export type Weapon = ForgeMath.Weapon
+export type Line = { m: number, ore: number, po: number, ps: number }
+export type Station = { m: number, c: number, keep: number }
 
 export type Profile = {
 	schemaVersion: number,
@@ -38,14 +54,15 @@ export type Profile = {
 	highestWeaponValue: number,
 	selectedMaterial: number,
 	unlockedTier: number,
-	ore: { number },
 	ingots: { number },
-	progress: { ore: number, smelt: number },
+	lines: { Line },
+	stations: { Station },
+	pads: { [string]: boolean },
 	levels: { [string]: number },
 	gear: { [string]: number },
 	weapons: { [string]: Weapon },
-	pending: Weapon?,
-	showcase: { string }, -- one entry per pedestal, "" when empty
+	showcase: { string }, -- one entry per podium, "" when empty
+	bank: number, -- display income waiting in the collector
 	journal: { number },
 	nextWeaponId: number,
 	lastSeen: number,
@@ -64,6 +81,15 @@ local function trackLevels(names: { string }): { [string]: number }
 	return out
 end
 
+local function newLine(materialIndex: number): Line
+	return { m = materialIndex, ore = 0, po = 0, ps = 0 }
+end
+
+local function newStation(materialIndex: number): Station
+	-- keep = lowest rarity an automatic forge keeps; 4 (Epic) by default, 7 sells everything.
+	return { m = materialIndex, c = Economy.STARTER_CLASS, keep = 4 }
+end
+
 -- Fresh profile. DataService also uses it as the ProfileStore template.
 function Economy.newProfile(): Profile
 	local ingots = zeros(Economy.MATERIAL_COUNT)
@@ -77,25 +103,30 @@ function Economy.newProfile(): Profile
 		highestWeaponValue = 0,
 		selectedMaterial = 1,
 		unlockedTier = 1,
-		ore = zeros(Economy.MATERIAL_COUNT),
 		ingots = ingots,
-		progress = { ore = 0, smelt = 0 },
+		lines = { newLine(1) },
+		stations = { newStation(1) },
+		pads = {},
 		levels = trackLevels(Balance.machineTracks),
 		gear = trackLevels(Balance.gearTracks),
 		weapons = {},
-		pending = nil,
 		showcase = table.create(Balance.inventory.showcaseSlots, ""),
+		bank = 0,
 		journal = zeros(Economy.MATERIAL_COUNT),
 		nextWeaponId = 1,
 		lastSeen = 0,
 	}
 end
 
-local function nonNegativeInt(value: any, fallback: number): number
+local function finiteNonNegative(value: any, fallback: number): number
 	if type(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
 		return fallback
 	end
-	return math.min(Balance.maxSafeInteger, math.floor(value))
+	return math.min(Balance.maxCoins, value)
+end
+
+local function nonNegativeInt(value: any, fallback: number): number
+	return math.floor(finiteNonNegative(value, fallback))
 end
 
 local function denseCounts(value: any, length: number): { number }
@@ -106,6 +137,56 @@ local function denseCounts(value: any, length: number): { number }
 		end
 	end
 	return out
+end
+
+local function clampMaterial(value: any, unlocked: number): number
+	return math.clamp(nonNegativeInt(value, 1), 1, unlocked)
+end
+
+function Economy.lineCount(p: Profile): number
+	return BuildPads.lineCount(p.pads)
+end
+
+function Economy.forgeCount(p: Profile): number
+	return BuildPads.forgeCount(p.pads)
+end
+
+function Economy.showcaseSlots(p: Profile): number
+	return BuildPads.showcaseSlots(p.pads, Balance.display.starterSlots, Balance.inventory.showcaseSlots)
+end
+
+-- Grows/shrinks lines and stations to what the owned pads allow, keeping existing entries.
+local function fitWorkshop(p: Profile)
+	local lines = {}
+	for i = 1, Economy.lineCount(p) do
+		local line = if type(p.lines) == "table" then p.lines[i] else nil
+		if type(line) == "table" then
+			lines[i] = {
+				m = clampMaterial(line.m, p.unlockedTier),
+				ore = math.min(nonNegativeInt(line.ore, 0), Balance.production.lineOreBuffer),
+				po = math.clamp(finiteNonNegative(line.po, 0), 0, 1),
+				ps = math.clamp(finiteNonNegative(line.ps, 0), 0, 1),
+			}
+		else
+			lines[i] = newLine(p.unlockedTier)
+		end
+	end
+	p.lines = lines
+	local stations = {}
+	for i = 1, Economy.forgeCount(p) do
+		local station = if type(p.stations) == "table" then p.stations[i] else nil
+		if type(station) == "table" then
+			stations[i] = {
+				m = clampMaterial(station.m, p.unlockedTier),
+				c = if ForgeMath.isValidClass(station.c) then station.c else Economy.STARTER_CLASS,
+				keep = math.clamp(nonNegativeInt(station.keep, 4), 1, 7),
+			}
+		else
+			stations[i] = newStation(p.unlockedTier)
+		end
+	end
+	p.stations = stations
+	p.selectedMaterial = p.lines[1].m
 end
 
 --[[
@@ -120,22 +201,25 @@ function Economy.reconcile(p: Profile): Profile
 			p[key] = value
 		end
 	end
-	for _, key in { "coins", "lifetimeCoins", "weaponsForged", "weaponsSold", "highestWeaponValue", "nextWeaponId", "lastSeen" } do
+	for _, key in { "coins", "lifetimeCoins", "highestWeaponValue", "bank" } do
+		p[key] = finiteNonNegative(p[key], template[key])
+	end
+	for _, key in { "weaponsForged", "weaponsSold", "nextWeaponId", "lastSeen" } do
 		p[key] = nonNegativeInt(p[key], template[key])
 	end
 	p.nextWeaponId = math.max(1, p.nextWeaponId)
-	p.ore = denseCounts(p.ore, Economy.MATERIAL_COUNT)
 	p.ingots = denseCounts(p.ingots, Economy.MATERIAL_COUNT)
 	p.journal = denseCounts(p.journal, Economy.MATERIAL_COUNT)
 	p.unlockedTier = math.clamp(nonNegativeInt(p.unlockedTier, 1), 1, Economy.MATERIAL_COUNT)
-	p.selectedMaterial = math.clamp(nonNegativeInt(p.selectedMaterial, 1), 1, p.unlockedTier)
-	if type(p.progress) ~= "table" then
-		p.progress = { ore = 0, smelt = 0 }
+	if type(p.pads) ~= "table" then
+		p.pads = {}
 	end
-	for _, key in { "ore", "smelt" } do
-		local value = p.progress[key]
-		p.progress[key] = if type(value) == "number" and value == value and value < math.huge then math.clamp(value, 0, 1) else 0
+	for id, value in p.pads do
+		if BuildPads.ById[id] == nil or value ~= true then
+			p.pads[id] = nil
+		end
 	end
+	fitWorkshop(p)
 	if type(p.levels) ~= "table" then p.levels = {} end
 	if type(p.gear) ~= "table" then p.gear = {} end
 	for _, group in { { p.levels, Balance.machineTracks }, { p.gear, Balance.gearTracks } } do
@@ -147,32 +231,30 @@ function Economy.reconcile(p: Profile): Profile
 	if type(p.weapons) ~= "table" then
 		p.weapons = {}
 	end
-	if p.pending ~= nil and type(p.pending) ~= "table" then p.pending = nil end
-	-- Older saves may contain weapons without the serial field. Recover it from IDs so a
-	-- fresh forge can never overwrite retained equipment. Valid records/values are preserved.
+	-- v1 kept one result pending a sell/keep choice; v2 keeps every result in the backpack.
+	if type(p.pending) == "table" and type(p.pending.id) == "string" and p.weapons[p.pending.id] == nil then
+		p.weapons[p.pending.id] = p.pending
+	end
+	p.pending = nil
+	-- Recover the weapon serial from IDs so a fresh forge can never overwrite a kept weapon.
 	local largest = 0
-	local function includeId(id: any)
-		local serial = if type(id) == "string" then tonumber(id:match("^w(%d+)$")) else nil
-		if serial and serial < Balance.maxSafeInteger then largest = math.max(largest, serial) end
-	end
 	for id, weapon in p.weapons do
-		includeId(id)
-		if type(weapon) == "table" then includeId(weapon.id) end
-	end
-	if p.pending then includeId(p.pending.id) end
-	p.nextWeaponId = math.max(p.nextWeaponId, largest + 1)
-	if p.settings ~= nil then
-		if type(p.settings) ~= "table" then p.settings = {} end
-		for _, key in { "autoSellBelow", "autoKeepFrom" } do
-			if p.settings[key] ~= nil then p.settings[key] = math.clamp(nonNegativeInt(p.settings[key], 0), 0, 7) end
+		for _, candidate in { id, if type(weapon) == "table" then weapon.id else nil } do
+			local serial = if type(candidate) == "string" then tonumber(candidate:match("^w(%d+)$")) else nil
+			if serial and serial < 2 ^ 53 then largest = math.max(largest, serial) end
 		end
+	end
+	p.nextWeaponId = math.max(p.nextWeaponId, largest + 1)
+	if p.settings ~= nil and type(p.settings) ~= "table" then
+		p.settings = {}
 	end
 	if type(p.showcase) ~= "table" then
 		p.showcase = {}
 	end
-	-- Fixed pedestal slots; an id stays on its slot, unknown or repeated ids become "".
+	-- Fixed podium slots; an id stays on its slot while that podium is built.
+	local slots = Economy.showcaseSlots(p)
 	local showcase = table.create(Balance.inventory.showcaseSlots, "")
-	for slot = 1, Balance.inventory.showcaseSlots do
+	for slot = 1, slots do
 		local id = p.showcase[slot]
 		if type(id) == "string" and p.weapons[id] and not table.find(showcase, id) then
 			showcase[slot] = id
@@ -184,13 +266,14 @@ function Economy.reconcile(p: Profile): Profile
 end
 
 local function addCoins(p: Profile, amount: number)
-	p.coins = math.min(Balance.maxSafeInteger, p.coins + amount)
+	p.coins = math.min(Balance.maxCoins, p.coins + amount)
 end
 
 local function addEarnings(p: Profile, amount: number)
 	addCoins(p, amount)
-	p.lifetimeCoins = math.min(Balance.maxSafeInteger, p.lifetimeCoins + amount)
+	p.lifetimeCoins = math.min(Balance.maxCoins, p.lifetimeCoins + amount)
 end
+Economy.addEarnings = addEarnings
 
 local function spend(p: Profile, cost: number): boolean
 	if p.coins < cost then
@@ -226,109 +309,83 @@ end
 local NO_BONUSES: Bonuses = { extract = 0, smelt = 0, prep = 0, storage = 0 }
 
 export type Rates = {
-	orePerSec: number,
-	ingotPerSec: number,
-	capacity: number, -- ingot storage cap (sum over all materials)
-	oreCapacity: number, -- raw ore storage cap (sum over all materials)
-	olderMaterialMultiplier: number,
+	orePerSec: number, -- per line
+	ingotPerSec: number, -- per line
+	lines: number,
+	capacity: number, -- ingot storage cap per material (each material has its own bin)
+	oreBuffer: number, -- raw ore one line's conveyor holds
 }
 
 function Economy.rates(p: Profile, bonuses: Bonuses?): Rates
 	local b = bonuses or NO_BONUSES
 	local prod = Balance.production
-	local tiersBehind = math.max(0, p.unlockedTier - p.selectedMaterial)
-	local older = math.min(prod.maxOlderMaterialRateMultiplier, prod.olderMaterialRateMultiplierPerTier ^ tiersBehind)
 	local extract = (1 + Balance.upgradeEffect("ExtractorOutput", p.levels.ExtractorOutput)) * Economy.familyMultiplier(b.extract)
 	local smelt = (1 + Balance.upgradeEffect("SmelterSpeed", p.levels.SmelterSpeed)) * Economy.familyMultiplier(b.smelt)
 	local storageFlat = Balance.upgradeEffect("StorageCapacity", p.levels.StorageCapacity) + Balance.upgradeEffect("Apron", p.gear.Apron)
-	local storageMult = Economy.familyMultiplier(b.storage)
 	return {
-		orePerSec = older * extract / prod.baseOreIntervalSec,
+		orePerSec = extract / prod.baseOreIntervalSec,
 		ingotPerSec = smelt / prod.baseSmeltIntervalSec,
-		capacity = math.floor((prod.baseIngotStorageCapacity + storageFlat) * storageMult),
-		oreCapacity = math.floor((prod.baseOreStorageCapacity + storageFlat) * storageMult),
-		olderMaterialMultiplier = older,
+		lines = #p.lines,
+		capacity = math.floor((prod.baseIngotStorageCapacity + storageFlat) * Economy.familyMultiplier(b.storage)),
+		oreBuffer = prod.lineOreBuffer,
 	}
 end
 
-local function total(list: { number }): number
+function Economy.ingotTotal(p: Profile): number
 	local sum = 0
-	for _, n in list do
+	for _, n in p.ingots do
 		sum += n
 	end
 	return sum
 end
 
--- Which material's ore the smelter takes next: the selected one first, else the highest tier.
-local function nextOreToSmelt(p: Profile): number?
-	if p.ore[p.selectedMaterial] > 0 then
-		return p.selectedMaterial
-	end
-	for index = Economy.MATERIAL_COUNT, 1, -1 do
-		if p.ore[index] > 0 then
-			return index
-		end
-	end
-	return nil
-end
-
 -- Most simulation steps per settle call; long offline gaps use proportionally bigger steps.
-local MAX_STEPS = 20000
--- Absorbs floating point drift so 60 s at 6 s/ore yields exactly 10 ore.
+local MAX_STEPS = 4000
+-- Absorbs floating point drift so 60 s at 3 s/ore yields exactly 20 ore.
 local EPSILON = 1e-9
 
 --[[
-	Advances extraction and smelting by `dt` seconds. The extractor produces the selected
-	material's ore; the smelter turns ore into ingots of the same material. Each stage stalls
-	when its output buffer is full, so nothing is ever created past the caps.
-	Returns ore and ingots produced.
+	Advances every ore line by `dt` seconds. A drill adds ore to its line's buffer; the smelter
+	turns buffered ore into ingots of the line's material in the shared vault. Each stage stalls
+	when its output is full, so nothing is ever created past the caps.
+	Returns ore mined and ingots smelted.
 ]]
 function Economy.settle(p: Profile, dt: number, rates: Rates): (number, number)
 	if dt ~= dt or dt <= 0 then
 		return 0, 0
 	end
-	local step = math.max(1, dt / MAX_STEPS)
-	local remaining = dt
+	local steps = math.clamp(math.ceil(dt), 1, MAX_STEPS)
+	local slice = dt / steps
 	local oreMade, ingotsMade = 0, 0
-	local progress = p.progress
-	local oreStock = total(p.ore)
-	local ingotStock = total(p.ingots)
-	while remaining > 0 do
-		local slice = math.min(step, remaining)
-		remaining -= slice
-
-		if oreStock < rates.oreCapacity then
-			progress.ore += rates.orePerSec * slice
-			local whole = math.min(math.floor(progress.ore + EPSILON), rates.oreCapacity - oreStock)
-			if whole > 0 then
-				p.ore[p.selectedMaterial] += whole
-				oreStock += whole
-				oreMade += whole
-				progress.ore = math.max(0, progress.ore - whole)
-			end
-		end
-		if oreStock >= rates.oreCapacity then
-			progress.ore = math.min(progress.ore, 1)
-		end
-
-		if ingotStock < rates.capacity and oreStock > 0 then
-			progress.smelt += rates.ingotPerSec * slice
-			while progress.smelt >= 1 - EPSILON and ingotStock < rates.capacity do
-				local source = nextOreToSmelt(p)
-				if not source then
-					break
+	for _ = 1, steps do
+		for _, line in p.lines do
+			local stock = p.ingots[line.m]
+			if line.ore < rates.oreBuffer then
+				line.po += rates.orePerSec * slice
+				local whole = math.min(math.floor(line.po + EPSILON), rates.oreBuffer - line.ore)
+				if whole > 0 then
+					line.ore += whole
+					oreMade += whole
+					line.po = math.max(0, line.po - whole)
 				end
-				p.ore[source] -= 1
-				p.ingots[source] += 1
-				oreStock -= 1
-				ingotStock += 1
-				ingotsMade += 1
-				progress.smelt = math.max(0, progress.smelt - 1)
 			end
-		end
-		if ingotStock >= rates.capacity or oreStock <= 0 then
-			-- Idle smelter keeps at most one unit of progress, so it cannot bank a burst.
-			progress.smelt = math.min(progress.smelt, 1)
+			if line.ore >= rates.oreBuffer then
+				line.po = math.min(line.po, 1)
+			end
+			if stock < rates.capacity and line.ore > 0 then
+				line.ps += rates.ingotPerSec * slice
+				local whole = math.min(math.floor(line.ps + EPSILON), line.ore, rates.capacity - stock)
+				if whole > 0 then
+					line.ore -= whole
+					p.ingots[line.m] += whole
+					ingotsMade += whole
+					line.ps = math.max(0, line.ps - whole)
+				end
+			end
+			if p.ingots[line.m] >= rates.capacity or line.ore <= 0 then
+				-- An idle smelter keeps at most one unit of progress, so it cannot bank a burst.
+				line.ps = math.min(line.ps, 1)
+			end
 		end
 	end
 	return oreMade, ingotsMade
@@ -346,31 +403,59 @@ function Economy.settleOffline(p: Profile, now: number, rates: Rates): number
 	return elapsed
 end
 
+-- Chooses which material ore line `line` mines. Ore already on its conveyor is smelted as
+-- the new material (the conveyor is short; this keeps switching instant and simple).
+function Economy.setLineMaterial(p: Profile, lineIndex: any, materialIndex: any): (boolean, any)
+	if type(lineIndex) ~= "number" or p.lines[lineIndex] == nil then
+		return false, "InvalidLine"
+	end
+	if not ForgeMath.isValidMaterial(materialIndex) then
+		return false, "InvalidMaterial"
+	end
+	if materialIndex > p.unlockedTier then
+		return false, "MaterialLocked"
+	end
+	p.lines[lineIndex].m = materialIndex
+	p.selectedMaterial = p.lines[1].m
+	return true, materialIndex
+end
+
+-- Legacy single-extractor API: selects line 1's material.
 function Economy.selectMaterial(p: Profile, index: any): (boolean, any)
+	return Economy.setLineMaterial(p, 1, index)
+end
+
+--[[
+	Buys material `index`, which must be the next locked one. The ore line it was bought from
+	(default 1) switches to it, so the purchase is felt immediately.
+]]
+function Economy.unlockMaterial(p: Profile, index: any, lineIndex: number?): (boolean, any)
+	local nextIndex = p.unlockedTier + 1
+	if index == nil then
+		index = nextIndex
+	end
 	if not ForgeMath.isValidMaterial(index) then
 		return false, "InvalidMaterial"
 	end
-	if index > p.unlockedTier then
-		return false, "MaterialLocked"
+	if index <= p.unlockedTier then
+		return false, "AlreadyUnlocked"
 	end
-	p.selectedMaterial = index
-	-- Ore already mined stays as that material; only future extraction changes.
-	return true, index
-end
-
--- Buys the next extractor tier, unlocking (and selecting) the next material.
-function Economy.unlockNextMaterial(p: Profile): (boolean, any)
-	local nextIndex = p.unlockedTier + 1
-	local mat = Materials[nextIndex]
-	if not mat then
-		return false, "MaxTier"
+	if index > nextIndex then
+		return false, "UnlockPrevious"
 	end
+	local mat = Materials[index]
 	if not spend(p, mat.unlockCost) then
 		return false, "NotEnoughCoins"
 	end
-	p.unlockedTier = nextIndex
-	p.selectedMaterial = nextIndex
-	return true, nextIndex
+	p.unlockedTier = index
+	local line = p.lines[lineIndex or 1] or p.lines[1]
+	line.m = index
+	p.selectedMaterial = p.lines[1].m
+	return true, index
+end
+
+function Economy.unlockNextMaterial(p: Profile): (boolean, any)
+	return Economy.unlockMaterial(p, p.unlockedTier + 1)
 end
 
 function Economy.trackLevel(p: Profile, track: string): number?
@@ -400,6 +485,27 @@ function Economy.buyUpgrade(p: Profile, track: any): (boolean, any)
 	return true, level + 1
 end
 
+-- Builds pad `padId` for its price. Returns the pad definition.
+function Economy.buyPad(p: Profile, padId: any): (boolean, any)
+	local pad = if type(padId) == "string" then BuildPads.ById[padId] else nil
+	if not pad then
+		return false, "InvalidPad"
+	end
+	if p.pads[pad.id] then
+		return false, "AlreadyBuilt"
+	end
+	local highest = math.max(p.unlockedTier, p.highestTierEver or 1)
+	if not BuildPads.available(pad, p.pads, highest) then
+		return false, "PadLocked"
+	end
+	if not spend(p, pad.cost) then
+		return false, "NotEnoughCoins"
+	end
+	p.pads[pad.id] = true
+	fitWorkshop(p)
+	return true, pad
+end
+
 export type Timing = { heatSec: number, windowSec: number, revealSec: number }
 
 -- Phase lengths for the next forge. Upgrades shorten downtime only, never the strike window.
@@ -407,12 +513,12 @@ function Economy.forgeTiming(p: Profile, mode: string, bonuses: Bonuses?): Timin
 	local b = bonuses or NO_BONUSES
 	local timing = Balance.forge.timing
 	local hammer = Balance.upgradeEffect("Hammer", p.gear.Hammer)
-	local heatCut = math.min(timing.maxDowntimeReduction, Balance.upgradeEffect("FurnaceHeat", p.levels.FurnaceHeat) + hammer)
-	local revealCut = math.min(timing.maxDowntimeReduction, Balance.upgradeEffect("AnvilFinish", p.levels.AnvilFinish) + hammer)
+	local heat = timing.baseHeatSec - Balance.upgradeEffect("FurnaceHeat", p.levels.FurnaceHeat) - hammer
+	local reveal = timing.baseQuenchAndRevealSec - Balance.upgradeEffect("AnvilFinish", p.levels.AnvilFinish) - hammer
 	return {
-		heatSec = timing.baseHeatSec * (1 - heatCut) / Economy.familyMultiplier(b.prep),
+		heatSec = math.max(timing.minPhaseSec, heat) / Economy.familyMultiplier(b.prep),
 		windowSec = if mode == "manual" then Balance.forge.manual.strikeWindowSec else Balance.forge.auto.windowSec,
-		revealSec = timing.baseQuenchAndRevealSec * (1 - revealCut),
+		revealSec = math.max(timing.minPhaseSec, reveal),
 	}
 end
 
@@ -424,14 +530,13 @@ function Economy.weaponCount(p: Profile): number
 	return count
 end
 
--- Room for one more weapon once the current pending result is auto-kept.
 function Economy.hasRoom(p: Profile): boolean
-	local after = Economy.weaponCount(p) + (if p.pending then 1 else 0)
-	return after < Balance.inventory.maxWeapons
+	return Economy.weaponCount(p) < Balance.inventory.maxWeapons
 end
 
--- Checks a forge can start. Does not spend anything: material is consumed at completion.
-function Economy.canForge(p: Profile, materialIndex: any, classIndex: any): (boolean, string?)
+-- Checks a forge can start. Does not spend anything: ingots are consumed at completion.
+-- `allowFullBackpack` lets automatic forges continue (they sell what does not fit).
+function Economy.canForge(p: Profile, materialIndex: any, classIndex: any, allowFullBackpack: boolean?): (boolean, string?)
 	if not ForgeMath.isValidMaterial(materialIndex) then
 		return false, "InvalidMaterial"
 	end
@@ -441,111 +546,97 @@ function Economy.canForge(p: Profile, materialIndex: any, classIndex: any): (boo
 	if materialIndex > p.unlockedTier then
 		return false, "MaterialLocked"
 	end
-	if p.ingots[materialIndex] < Balance.forge.materialUnitsPerRoll then
+	if p.ingots[materialIndex] < Balance.recipeIngots(classIndex) then
 		return false, "NoMaterial"
 	end
-	if not Economy.hasRoom(p) then
+	if not allowFullBackpack and not Economy.hasRoom(p) then
 		return false, "InventoryFull"
 	end
 	return true, nil
 end
 
+export type ForgeOptions = {
+	mult: number?, -- permanent cash multiplier (evolution)
+	keepFrom: number?, -- results below this rarity are sold at once (auto modes); nil keeps all
+	allowFullBackpack: boolean?, -- sell instead of failing when the backpack is full
+}
+
+local function nextWeaponId(p: Profile): string
+	local serial = math.max(1, nonNegativeInt(p.nextWeaponId, 1))
+	local id = "w" .. serial
+	while p.weapons[id] ~= nil do
+		serial += 1
+		id = "w" .. serial
+	end
+	p.nextWeaponId = serial + 1
+	return id
+end
+Economy.nextWeaponId = nextWeaponId
+
 --[[
-	Completes a forge atomically: spends the ingot (Gloves may refund it), rolls the weapon,
-	auto-keeps any previous pending result, sets `pending`, and updates counters and journal.
-	`luck` must already be server-derived (strike state or auto mode), never client-claimed.
+	Completes one forge atomically: spends the recipe's ingots (Gloves may refund them), rolls the
+	weapon, then keeps it in the backpack or sells it. `luck` must already be server-derived
+	(strike state or auto mode), never client-claimed.
+	Returns { weapon, sold: boolean, coins: number }.
 ]]
-function Economy.completeForge(p: Profile, materialIndex: number, classIndex: number, luck: number, rng: ForgeMath.Rng, now: number): (boolean, any)
-	local ok, err = Economy.canForge(p, materialIndex, classIndex)
+function Economy.completeForge(p: Profile, materialIndex: number, classIndex: number, luck: number, rng: ForgeMath.Rng, now: number, options: ForgeOptions?): (boolean, any)
+	local opts = options or {}
+	local ok, err = Economy.canForge(p, materialIndex, classIndex, opts.allowFullBackpack)
 	if not ok then
 		return false, err
 	end
-	local serial = nonNegativeInt(p.nextWeaponId, 1)
-	local id = "w" .. serial
-	while p.weapons[id] ~= nil or (p.pending and p.pending.id == id) do
-		serial = if serial >= Balance.maxSafeInteger then 1 else serial + 1
-		id = "w" .. serial
+	local id = nextWeaponId(p)
+	local weapon = ForgeMath.rollWeapon(rng, materialIndex, classIndex, luck, { id = id, ts = now, mult = opts.mult })
+	local refund = rng:NextNumber() < Balance.upgradeEffect("Gloves", p.gear.Gloves)
+	if not refund then
+		p.ingots[materialIndex] -= Balance.recipeIngots(classIndex)
 	end
-	local weapon = ForgeMath.rollWeapon(rng, materialIndex, classIndex, luck, { id = id, ts = now })
-	local keepIngot = rng:NextNumber() < Balance.upgradeEffect("Gloves", p.gear.Gloves)
-	if not keepIngot then
-		p.ingots[materialIndex] -= Balance.forge.materialUnitsPerRoll
-	end
-	p.nextWeaponId = if serial >= Balance.maxSafeInteger then 1 else serial + 1
-	if p.pending then
-		p.weapons[p.pending.id] = p.pending
-	end
-	p.pending = weapon
 	p.weaponsForged += 1
 	p.highestWeaponValue = math.max(p.highestWeaponValue, weapon.v)
 	p.journal[materialIndex] = bit32.bor(p.journal[materialIndex], bit32.lshift(1, weapon.r - 1))
-	return true, weapon
-end
-
--- Sells or keeps the pending forge result. A second call finds nothing pending.
-function Economy.resolvePending(p: Profile, action: any): (boolean, any)
-	local weapon = p.pending
-	if not weapon then
-		return false, "NothingPending"
-	end
-	if action == "sell" then
-		p.pending = nil
+	local sell = (opts.keepFrom ~= nil and weapon.r < opts.keepFrom) or not Economy.hasRoom(p)
+	if sell then
 		addEarnings(p, weapon.v)
 		p.weaponsSold += 1
-		return true, { action = "sell", weapon = weapon, coins = weapon.v }
-	elseif action == "keep" then
-		if Economy.weaponCount(p) >= Balance.inventory.maxWeapons then
-			return false, "InventoryFull"
-		end
-		p.pending = nil
-		p.weapons[weapon.id] = weapon
-		return true, { action = "keep", weapon = weapon }
+		return true, { weapon = weapon, sold = true, coins = weapon.v, refund = refund }
 	end
-	return false, "InvalidAction"
+	p.weapons[id] = weapon
+	return true, { weapon = weapon, sold = false, coins = 0, refund = refund }
 end
 
--- One minigame can produce a primary result and one extra independent roll. The primary
--- remains pending for its reveal; extra results are kept (or filtered into sales). Each
--- roll validates its own material and inventory capacity before charging anything.
-function Economy.completeForgeBatch(p: Profile, materialIndex: number, classIndex: number, luck: number, rng: ForgeMath.Rng, now: number, rolls: number, sellBelow: number?, extraSellBelow: number?): (boolean, any)
+--[[
+	One minigame can produce a primary result and one extra independent roll (Multi-Forge).
+	Each roll validates its own ingots before charging anything; a missing extra simply reduces
+	throughput. Returns { results = { forge result... } }.
+]]
+function Economy.completeForgeBatch(p: Profile, materialIndex: number, classIndex: number, luck: number, rng: ForgeMath.Rng, now: number, rolls: number, options: ForgeOptions?): (boolean, any)
 	if rolls ~= math.floor(rolls) or rolls < 1 or rolls > 2 then
 		return false, "InvalidRequest"
 	end
-	local ok, primary = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now)
+	local ok, first = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now, options)
 	if not ok then
-		return false, primary
+		return false, first
 	end
-	local threshold = if type(sellBelow) == "number" and sellBelow == sellBelow then sellBelow else 0
-	if primary.r < threshold then
-		Economy.resolvePending(p, "sell")
-	end
-	local pendingPrimary = p.pending
-	local extraThreshold = if type(extraSellBelow) == "number" and extraSellBelow == extraSellBelow then extraSellBelow else threshold
-	local extras = {}
+	local results = { first }
 	for _ = 2, rolls do
-		local extraOk, extra = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now)
+		local extraOk, extra = Economy.completeForge(p, materialIndex, classIndex, luck, rng, now, options)
 		if not extraOk then
-			break -- lack of supply/room reduces throughput, never creates a free result
+			break
 		end
-		table.insert(extras, extra)
-		Economy.resolvePending(p, if extra.r < extraThreshold then "sell" else "keep")
-		if pendingPrimary then
-			p.weapons[pendingPrimary.id] = nil
-		end
-		p.pending = pendingPrimary
+		table.insert(results, extra)
 	end
-	return true, { weapon = primary, extraWeapons = extras }
+	return true, { results = results }
 end
 
--- Sells kept weapons by id. Unknown, duplicate and showcased ids are skipped, never paid twice.
-function Economy.sellWeapons(p: Profile, ids: any): (boolean, any)
+-- Sells kept weapons by id. Unknown, duplicate, displayed and `protected` ids are skipped.
+function Economy.sellWeapons(p: Profile, ids: any, protected: { [string]: boolean }?): (boolean, any)
 	if type(ids) ~= "table" or #ids == 0 or #ids > Balance.inventory.maxSellBatch then
 		return false, "InvalidRequest"
 	end
 	local sold, coins = {}, 0
 	for _, id in ids do
 		local weapon = if type(id) == "string" then p.weapons[id] else nil
-		if weapon and not table.find(p.showcase, id) then
+		if weapon and not table.find(p.showcase, id) and not (protected and protected[id]) then
 			p.weapons[id] = nil
 			coins += weapon.v
 			p.weaponsSold += 1
@@ -559,11 +650,38 @@ function Economy.sellWeapons(p: Profile, ids: any): (boolean, any)
 	return true, { sold = sold, coins = coins }
 end
 
--- Places a kept weapon on pedestal `slot` (1..showcaseSlots), or clears it when id is nil/"".
--- A weapon stands on at most one pedestal; placing it elsewhere moves it.
+-- Every backpack weapon below rarity `keepFrom` (nil sells all), excluding displayed weapons.
+function Economy.sellableIds(p: Profile, keepFrom: number?): { string }
+	local ids = {}
+	for id, weapon in p.weapons do
+		if not table.find(p.showcase, id) and (keepFrom == nil or weapon.r < keepFrom) then
+			table.insert(ids, id)
+		end
+	end
+	table.sort(ids)
+	while #ids > Balance.inventory.maxSellBatch do
+		table.remove(ids)
+	end
+	return ids
+end
+
+function Economy.sellAll(p: Profile, keepFrom: any, protected: { [string]: boolean }?): (boolean, any)
+	local threshold = if type(keepFrom) == "number" and keepFrom >= 1 and keepFrom <= 7 then math.floor(keepFrom) else nil
+	local ids = Economy.sellableIds(p, threshold)
+	if #ids == 0 then
+		return false, "NothingSold"
+	end
+	return Economy.sellWeapons(p, ids, protected)
+end
+
+-- Places a kept weapon on podium `slot`, or clears it when id is nil/"". A weapon stands on at
+-- most one podium; placing it elsewhere moves it. The podium must be built.
 function Economy.setShowcase(p: Profile, slot: any, id: any): (boolean, any)
 	if type(slot) ~= "number" or slot ~= math.floor(slot) or slot < 1 or slot > Balance.inventory.showcaseSlots then
 		return false, "InvalidSlot"
+	end
+	if slot > Economy.showcaseSlots(p) then
+		return false, "SlotLocked"
 	end
 	if id == nil or id == "" then
 		p.showcase[slot] = ""
@@ -580,7 +698,7 @@ function Economy.setShowcase(p: Profile, slot: any, id: any): (boolean, any)
 	return true, p.showcase
 end
 
--- Puts a kept weapon on the first free pedestal, or takes it down if already shown.
+-- Puts a kept weapon on the first free podium, or takes it down if already shown.
 function Economy.toggleShowcase(p: Profile, id: any): (boolean, any)
 	if type(id) ~= "string" or not p.weapons[id] then
 		return false, "UnknownWeapon"
@@ -590,12 +708,88 @@ function Economy.toggleShowcase(p: Profile, id: any): (boolean, any)
 		p.showcase[at] = ""
 		return true, p.showcase
 	end
-	local free = table.find(p.showcase, "")
-	if not free then
-		return false, "ShowcaseFull"
+	for slot = 1, Economy.showcaseSlots(p) do
+		if p.showcase[slot] == "" then
+			p.showcase[slot] = id
+			return true, p.showcase
+		end
 	end
-	p.showcase[free] = id
-	return true, p.showcase
+	return false, "ShowcaseFull"
+end
+
+-- What one displayed weapon earns per second (see Balance.display).
+function Economy.displayIncome(p: Profile, weapon: Weapon, mult: number?): number
+	local value = weapon.v
+	if Balance.display.capToCurrentTier then
+		value = math.min(value, ForgeMath.maxValue(p.unlockedTier, mult))
+	end
+	return value * Balance.display.incomePerSecond
+end
+
+function Economy.displayIncomeTotal(p: Profile, mult: number?, skip: { [string]: boolean }?): number
+	local total = 0
+	for slot = 1, Economy.showcaseSlots(p) do
+		local id = p.showcase[slot]
+		local weapon = if id ~= "" then p.weapons[id] else nil
+		if weapon and not (skip and skip[id]) then
+			total += Economy.displayIncome(p, weapon, mult)
+		end
+	end
+	return total
+end
+
+-- Adds `dt` seconds of display income to the collector bank, capped. Returns cash added.
+function Economy.accrueDisplay(p: Profile, dt: number, mult: number?, efficiency: number?, skip: { [string]: boolean }?): number
+	if dt ~= dt or dt <= 0 then
+		return 0
+	end
+	local perSec = Economy.displayIncomeTotal(p, mult, skip)
+	if perSec <= 0 then
+		return 0
+	end
+	local cap = perSec * Balance.display.bankCapSec
+	local before = p.bank
+	p.bank = math.min(math.max(before, cap), before + perSec * dt * (efficiency or 1))
+	if before >= cap then
+		p.bank = before -- already full: nothing more accrues, nothing is lost
+	end
+	return p.bank - before
+end
+
+-- Moves the collector bank into the player's cash. Returns cash collected.
+function Economy.collectBank(p: Profile): (boolean, any)
+	local amount = math.floor(p.bank)
+	if amount <= 0 then
+		return false, "NothingToCollect"
+	end
+	p.bank = 0
+	addEarnings(p, amount)
+	return true, amount
+end
+
+--[[
+	Forge station configuration. `keep` is the lowest rarity an automatic forge keeps
+	(1 keeps everything, 7 sells everything).
+]]
+function Economy.configureStation(p: Profile, stationIndex: any, materialIndex: any, classIndex: any, keep: any): (boolean, any)
+	if type(stationIndex) ~= "number" or p.stations[stationIndex] == nil then
+		return false, "InvalidStation"
+	end
+	if not ForgeMath.isValidMaterial(materialIndex) then
+		return false, "InvalidMaterial"
+	end
+	if materialIndex > p.unlockedTier then
+		return false, "MaterialLocked"
+	end
+	if not ForgeMath.isValidClass(classIndex) then
+		return false, "InvalidClass"
+	end
+	if type(keep) ~= "number" or keep ~= math.floor(keep) or keep < 1 or keep > 7 then
+		return false, "InvalidSetting"
+	end
+	local station = p.stations[stationIndex]
+	station.m, station.c, station.keep = materialIndex, classIndex, keep
+	return true, station
 end
 
 -- True when weapon of `rarity` has been forged from `materialIndex` (collection journal).

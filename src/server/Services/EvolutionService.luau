@@ -88,14 +88,19 @@ end
 -- Starting values come from the core schema (Shared.Economy.newProfile) when it exists, so a
 -- reset produces exactly what a new player has (dense ore/ingot arrays, starter ingots, track
 -- levels). Config.Evolution.Resets values are the fallback.
-local function freshProfile(): any
+local function economyModule(): any
 	local shared = ReplicatedStorage:FindFirstChild("Shared")
 	local economy = shared and shared:FindFirstChild("Economy")
 	if economy == nil then
 		return nil
 	end
 	local ok, module = pcall(require, economy)
-	if not ok or type(module) ~= "table" or type(module.newProfile) ~= "function" then
+	return if ok and type(module) == "table" then module else nil
+end
+
+local function freshProfile(): any
+	local module = economyModule()
+	if not module or type(module.newProfile) ~= "function" then
 		return nil
 	end
 	local okProfile, profile = pcall(module.newProfile)
@@ -139,10 +144,13 @@ function Logic.progress(profile: any): { forged: number, tier: number, coinsEarn
 	local forged = math.max(0, (profile.weaponsForged or 0) - (base.weaponsForged or 0))
 	local earned = math.max(0, (profile.lifetimeCoins or 0) - (base.lifetimeCoins or 0))
 	local current = profile.unlockedTier or 1
-	local unlockedFresh = if current > (base.unlockedTier or 1) then current else 1
+	-- v2: the tier goal is literal ("Unlock Gold"), which a young player can read. Only a
+	-- material bought since the last evolution counts, so a protected evolution that kept a
+	-- high tier cannot immediately qualify again.
+	local unlockedFresh = if current > (base.unlockedTier or 1) or (base.unlockedTier or 1) <= 1 then current else 1
 	return {
 		forged = forged,
-		tier = math.max(unlockedFresh, Logic.tierForCoins(earned)),
+		tier = unlockedFresh,
 		coinsEarned = earned,
 	}
 end
@@ -158,8 +166,12 @@ function Logic.eligible(profile: any): boolean
 	return progress.forged >= need.forged and progress.tier >= need.tier
 end
 
-function Logic.bonuses(rank: number): { production: number, prep: number }
-	return { production = rank * Evolution.ProductionPerRank, prep = rank * Evolution.PrepPerRank }
+function Logic.bonuses(rank: number): { production: number, prep: number, cash: number }
+	return {
+		production = rank * Evolution.ProductionPerRank,
+		prep = rank * Evolution.PrepPerRank,
+		cash = Evolution.cashMultiplier(rank),
+	}
 end
 
 function Logic.status(profile: any)
@@ -203,6 +215,11 @@ function Logic.evolve(profile: any, protected: boolean, now: number): (boolean, 
 			local value = if fresh and fresh[entry.field] ~= nil then fresh[entry.field] else entry.value
 			profile[entry.field] = deepCopy(value)
 		end
+		-- Re-fit ore lines/forges to the (kept) build pads and repair the reset fields.
+		local module = economyModule()
+		if module and type(module.reconcile) == "function" then
+			module.reconcile(profile)
+		end
 	end
 	profile.evolutionRank += 1
 	profile.evolveBaseline = {
@@ -241,7 +258,7 @@ function EvolutionService.evolve(player: any, protected: any): (boolean, any)
 	return ok, result
 end
 
-function EvolutionService.bonuses(player: any): { production: number, prep: number }
+function EvolutionService.bonuses(player: any): { production: number, prep: number, cash: number }
 	local profile = dataOf(player)
 	return Logic.bonuses(if profile then profile.evolutionRank or 0 else 0)
 end

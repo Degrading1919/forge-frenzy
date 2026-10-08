@@ -1,13 +1,11 @@
 --[[
 	Runs src/server/Tests/*.spec.luau outside Studio with Lune (https://lune-org.github.io),
-	then checks Config/Materials and Config/Balance against design/balance-v0.json.
+	then sanity-checks the generated v2 economy curve (materials, pads, eggs, tracks).
 
 	    lune run tools/lune/run-tests.luau [filter]
 ]]
 
-local fs = require("@lune/fs")
 local process = require("@lune/process")
-local serde = require("@lune/serde")
 local env = require("./env")
 
 local ROOT = env.root
@@ -48,66 +46,100 @@ for _, spec in testsNode:GetChildren() do
 	end
 end
 
--- design/balance-v0.json sync ---------------------------------------------------------------------
-if not filter or ("balance-sync"):find(filter, 1, true) then
-	print("balance-sync (design/balance-v0.json)")
-	local json = serde.decode("json", fs.readFile(ROOT .. "/design/balance-v0.json"))
+-- v2 economy curve sanity ---------------------------------------------------------------------
+-- The v0 numbers in design/balance-v0.json are superseded by the generated v2 curve
+-- (Config/Materials, docs/22-23). These checks pin the shape of the curve, not its tuning.
+if not filter or ("balance-sync"):find(filter, 1, true) or ("curve"):find(filter, 1, true) then
+	print("balance-sync (v2 curve sanity)")
 	local Shared = services.ReplicatedStorage.Shared
 	local Materials = requireModule(Shared.Config.Materials)
 	local Balance = requireModule(Shared.Config.Balance)
+	local BuildPads = requireModule(Shared.Config.BuildPads)
+	local Eggs = requireModule(Shared.Config.Eggs)
+	local ForgeMath = requireModule(Shared.ForgeMath)
 	local function check(label, fn)
 		local ok, err = pcall(fn)
 		report(ok, label, err)
 	end
-	check("materials match", function()
-		assert(#Materials == #json.materials, "material count differs")
-		for i, m in json.materials do
-			local c = Materials[i]
-			for _, pair in { { "id", "id" }, { "name", "name" }, { "index", "index" }, { "era", "era" }, { "priceMin", "priceMin" }, { "priceMax", "priceMax" }, { "extractorUnlockCoinCost", "unlockCost" } } do
-				assert(m[pair[1]] == c[pair[2]], `material {i} {pair[2]}: json {m[pair[1]]} vs config {c[pair[2]]}`)
+	local function finitePositive(n)
+		return type(n) == "number" and n == n and n > 0 and n < math.huge
+	end
+	check("32 materials with sequential indices and unique ids", function()
+		assert(#Materials == 32, "material count " .. #Materials)
+		local ids = {}
+		for i, m in Materials do
+			assert(m.index == i, "index at " .. i)
+			assert(not ids[m.id], "duplicate id " .. m.id)
+			ids[m.id] = true
+		end
+	end)
+	check("priceMin and unlockCost strictly increase; Copper is free", function()
+		assert(Materials[1].unlockCost == 0, "Copper unlock must be free")
+		assert(finitePositive(Materials[1].priceMin))
+		assert(Materials[2].unlockCost > 0, "Tin must cost something")
+		for i = 2, #Materials do
+			assert(Materials[i].priceMin > Materials[i - 1].priceMin, "priceMin not increasing at " .. i)
+			if i > 2 then
+				assert(Materials[i].unlockCost > Materials[i - 1].unlockCost, "unlockCost not increasing at " .. i)
 			end
+			assert(finitePositive(Materials[i].unlockCost) and Materials[i].unlockCost <= Balance.maxCoins, "unlockCost range at " .. i)
 		end
 	end)
-	check("weapon classes match", function()
-		for i, name in json.weaponClasses do
-			assert(Balance.weaponClasses[i].id == name, "class " .. i)
-		end
-		assert(#Balance.weaponClasses == #json.weaponClasses)
-	end)
-	check("forge tables match", function()
-		local f, jf = Balance.forge, json.forge
-		assert(f.manual.strikeWindowSec == jf.manual.strikeWindowSec)
-		assert(f.manual.baseLuck == jf.manual.baseLuck)
-		assert(f.manual.luckPerCps == jf.manual.luckPerCps)
-		assert(f.manual.maxLuck == jf.manual.maxLuck)
-		assert(f.manual.inputRateGuardCps == jf.manual.inputRateGuardCps)
-		assert(f.auto.freeLuck == jf.auto.freeLuck and f.auto.premiumLuck == jf.auto.premiumLuck)
-		assert(f.timing.baseHeatSec == jf.timing.baseHeatSec)
-		assert(f.timing.baseQuenchAndRevealSec == jf.timing.baseQuenchAndRevealSec)
-		assert(f.materialUnitsPerRoll == jf.materialUnitsPerRoll)
-		for i, v in jf.rarity.baseChancePercent do
-			assert(f.rarity.baseChancePercent[i] == v, "rarity chance " .. i)
-			assert(f.rarity.valueBandPositions[i] == jf.rarity.valueBandPositions[i], "band " .. i)
-			assert(f.rarity.names[i] == jf.rarity.names[i], "rarity name " .. i)
-			assert(f.trait.baseChanceByRarityPercent[i] == jf.trait.baseChanceByRarityPercent[i], "trait " .. i)
-		end
-		for _, name in jf.rarity.scaledWithLuck do
-			assert(table.find(f.rarity.scaledWithLuck, table.find(f.rarity.names, name)), "scaled " .. name)
-		end
-		assert(f.rarity.names[f.rarity.remainder] == jf.rarity.remainderCategory)
-		for i, v in jf.craftsmanship.baseChancePercent do
-			assert(f.craftsmanship.baseChancePercent[i] == v, "craft chance " .. i)
-			assert(f.craftsmanship.valueBandOffsets[i] == jf.craftsmanship.valueBandOffsets[i], "craft offset " .. i)
-		end
-		assert(f.trait.bonusToValuePosition == jf.trait.bonusToValuePosition)
-		for key, v in jf.payout do
-			assert(f.payout[key] == v, "payout " .. key)
+	check("priceMax is about bandRatio x priceMin for every material", function()
+		for i, m in Materials do
+			local ratio = m.priceMax / m.priceMin
+			assert(ratio >= 17 and ratio <= 19, `material {i} band ratio {ratio}`)
 		end
 	end)
-	check("production matches", function()
-		local p, jp = Balance.production, json.production
-		for _, key in { "baseOreIntervalSec", "baseSmeltIntervalSec", "maxOlderMaterialRateMultiplier", "olderMaterialRateMultiplierPerTier", "baseIngotStorageCapacity", "maxConfiguredProductionFamilyMultiplier" } do
-			assert(p[key] == jp[key], key)
+	check("value ratio between tiers stays between 2x and 3x", function()
+		for i = 2, #Materials do
+			local ratio = Materials[i].priceMin / Materials[i - 1].priceMin
+			assert(ratio >= 2.0 and ratio <= 3.05, `tier {i} ratio {ratio}`)
+		end
+	end)
+	check("Primordium's best weapon exceeds 1e15 and stays under the cash ceiling", function()
+		local best = ForgeMath.maxValue(32)
+		assert(best > 1e15, "maxValue " .. best)
+		assert(best < Balance.maxCoins, "maxValue above the cash ceiling")
+		for i = 2, #Materials do
+			assert(ForgeMath.maxValue(i) > ForgeMath.maxValue(i - 1), "maxValue not increasing at " .. i)
+		end
+	end)
+	check("weapon classes: five, bigger recipes are worth more per forge", function()
+		assert(#Balance.weaponClasses == 5)
+		local seen = {}
+		for _, class in Balance.weaponClasses do
+			assert(not seen[class.id], "duplicate class " .. class.id)
+			seen[class.id] = true
+			assert(class.ingots >= 1 and class.ingots == math.floor(class.ingots))
+			assert(class.valueMult > 0)
+		end
+		local ordered = table.clone(Balance.weaponClasses)
+		table.sort(ordered, function(a, b) return a.ingots < b.ingots end)
+		for i = 2, #ordered do
+			assert(ordered[i].valueMult > ordered[i - 1].valueMult, "value must rise with recipe size")
+		end
+	end)
+	check("every pad cost is positive and finite", function()
+		assert(#BuildPads.List > 0)
+		for _, pad in BuildPads.List do
+			assert(finitePositive(pad.cost) and pad.cost <= Balance.maxCoins, pad.id)
+		end
+	end)
+	check("every egg cost is positive and finite and rises with its tier", function()
+		assert(#Eggs.List > 0)
+		local last = 0
+		for _, egg in Eggs.List do
+			assert(finitePositive(egg.coinCost), egg.id)
+			assert(egg.coinCost > last, egg.id .. " is not dearer than the previous egg")
+			last = egg.coinCost
+		end
+	end)
+	check("every upgrade level costs a positive finite amount", function()
+		for name, def in Balance.tracks do
+			for level = 0, def.maxLevel - 1 do
+				assert(finitePositive(Balance.upgradeCost(name, level)), `{name} level {level}`)
+			end
 		end
 	end)
 end

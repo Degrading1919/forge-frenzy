@@ -47,8 +47,18 @@ Companions.RarityColors = {
 Companions.BaseSlots = 2
 Companions.EarnedSlotAtEvolutionRank = 1 -- third slot comes from the first evolution
 Companions.MaxSlots = 3
-Companions.InventoryCapacity = 50
+Companions.InventoryCapacity = 100
 Companions.HatchCooldownSec = 1.0
+
+-- Pet merging (docs/21 §12): three identical pets of the same level become one pet one level
+-- higher. Each level multiplies the pet's bonuses. Premium pets cannot be merged.
+Companions.MergeCount = 3
+Companions.MaxLevel = 5
+Companions.LevelMultipliers = { 1, 1.6, 2.5, 4, 6.5 }
+
+function Companions.levelMultiplier(level: number): number
+	return Companions.LevelMultipliers[math.clamp(math.floor(level or 1), 1, Companions.MaxLevel)]
+end
 
 local rgb = Color3.fromRGB
 

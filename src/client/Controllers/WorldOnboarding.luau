@@ -1,291 +1,238 @@
 --!nonstrict
--- Guided first session. profile.tutorial = number of completed steps (0 = new). Current step = tutorial + 1.
-local Players = game:GetService("Players")
+--[[
+	Onboarding v2 (docs/21 §14): one idea at a time, almost no reading.
 
+	A short banner under the cash pill says what to do next ("Walk to your FORGE"), a glowing
+	trail runs from your character to the target and a big bouncing arrow sits over it. Each step
+	completes from real game state, so the loop is learned by doing:
+	  forge -> forge 3 -> sell at the booth -> buy Tin -> Auto Forge -> build a pad -> display
+	The banner hides while a panel or reveal is open so it never covers buttons.
+]]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Common = require(script.Parent.WorldUtil.Common)
-local Net = require(script.Parent.Parent.Net)
 local State = Common.State
-local Theme = require(script.Parent.Parent.UI.Theme)
-local Panels = require(script.Parent.Parent.UI.Panels)
+local UI = Common.Client.UI
+local Theme = require(UI.Theme)
+local Panels = require(UI.Panels)
+local Reveal = require(UI.Reveal)
+local Toast = require(UI.Toast)
+local Net = require(Common.Client.Net)
 
 local WorldOnboarding = { Priority = 0 }
+local C = Theme.Colors
 
-local TOTAL = 7
-local TEXT = {
-	"Walk to your workshop",
-	"Open the forge at the anvil",
-	"Forge your first weapon",
-	"Sell it or keep it",
-	"Buy an upgrade at the Workshop",
-	"Unlock Tin at the Extractor",
-	"Visit the Hatchery for a companion",
+local function hub()
+	return Common.hub()
+end
+
+local function plotFind(...)
+	local plot = Common.myPlot()
+	return plot and Common.find(plot, ...)
+end
+
+local STEPS = {
+	{
+		text = "🔨 Walk to your FORGE and press BEGIN!",
+		target = function() return plotFind("Machines", "Forge1", "Base") end,
+		done = function(p) return (p.weaponsForged or 0) >= 1 end,
+	},
+	{
+		text = "🔨 Forge 2 more weapons! Tap FAST for better luck",
+		target = function() return plotFind("Machines", "Forge1", "Base") end,
+		done = function(p) return (p.weaponsForged or 0) >= 3 end,
+	},
+	{
+		text = "💰 Run to the SELL booth in town!",
+		target = function() local h = hub(); return h and Common.find(h, "SellBooth", "Base") end,
+		done = function(p) return (p.lifetimeCoins or 0) > 0 end,
+	},
+	{
+		text = "⛏️ Buy TIN at your Ore Drill!",
+		target = function() return plotFind("Machines", "Line1", "Drill", "Base") end,
+		done = function(p) return (p.unlockedTier or 1) >= 2 end,
+	},
+	{
+		text = "⚙️ Turn on AUTO FORGE at your forge!",
+		target = function() return plotFind("Machines", "Forge1", "Base") end,
+		done = function(p)
+			for _, st in p.forgeStatus or {} do
+				if st.auto then return true end
+			end
+			return false
+		end,
+	},
+	{
+		text = "🏗️ Step on a glowing pad to BUILD!",
+		target = function()
+			local pads = plotFind("BuildPads")
+			return pads and pads:GetChildren()[1]
+		end,
+		done = function(p) return next(p.pads or {}) ~= nil end,
+	},
+	{
+		text = "🏆 Put a weapon on a podium. It makes cash!",
+		target = function() return plotFind("Showcase", "Pedestal1", "Top") end,
+		done = function(p)
+			for _, id in p.showcase or {} do
+				if id ~= "" then return true end
+			end
+			return false
+		end,
+	},
 }
 
-local localDone = 0 -- steps we have detected complete locally
-local reported = 0
-local forgeStarted = false
-local gui, card, titleL, bodyL, barFill
-local beam, a0, marker
-local lastTarget = nil
+local ui: any = {}
+local step = 0
 local finished = false
 
-local function buildGui()
-	gui = Instance.new("ScreenGui")
-	gui.Name = "Onboarding"
-	gui.ResetOnSpawn = false
-	gui.DisplayOrder = 4
-	card = Instance.new("Frame")
-	card.AnchorPoint = Vector2.new(1, 0)
-	card.Position = UDim2.new(1, -12, 0, 70)
-	card.Size = UDim2.fromOffset(270, 92)
-	card.BackgroundColor3 = Color3.fromRGB(34, 26, 22)
-	card.BackgroundTransparency = 0.1
-	card.BorderSizePixel = 0
-	card.Parent = gui
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, 10)
-	c.Parent = card
-	local s = Instance.new("UIStroke")
-	s.Color = Color3.fromRGB(255, 160, 60)
-	s.Thickness = 2
-	s.Parent = card
-	titleL = Instance.new("TextLabel")
-	titleL.BackgroundTransparency = 1
-	titleL.Position = UDim2.fromOffset(12, 6)
-	titleL.Size = UDim2.new(1, -24, 0, 18)
-	titleL.Font = Enum.Font.GothamBold
-	titleL.TextSize = 13
-	titleL.TextXAlignment = Enum.TextXAlignment.Left
-	titleL.TextColor3 = Color3.fromRGB(255, 170, 70)
-	titleL.Parent = card
-	bodyL = Instance.new("TextLabel")
-	bodyL.BackgroundTransparency = 1
-	bodyL.Position = UDim2.fromOffset(12, 26)
-	bodyL.Size = UDim2.new(1, -24, 0, 42)
-	bodyL.Font = Enum.Font.FredokaOne
-	bodyL.TextSize = 20
-	bodyL.TextWrapped = true
-	bodyL.TextXAlignment = Enum.TextXAlignment.Left
-	bodyL.TextYAlignment = Enum.TextYAlignment.Top
-	bodyL.TextColor3 = Color3.fromRGB(245, 235, 215)
-	bodyL.Parent = card
-	local bar = Instance.new("Frame")
-	bar.Position = UDim2.new(0, 12, 1, -16)
-	bar.Size = UDim2.new(1, -24, 0, 6)
-	bar.BackgroundColor3 = Color3.fromRGB(70, 58, 50)
-	bar.BorderSizePixel = 0
-	bar.Parent = card
-	barFill = Instance.new("Frame")
-	barFill.BackgroundColor3 = Color3.fromRGB(255, 160, 60)
-	barFill.BorderSizePixel = 0
-	barFill.Size = UDim2.fromScale(0, 1)
-	barFill.Parent = bar
-	gui.Parent = Common.player:WaitForChild("PlayerGui")
-	local function resize()
-		local available = Panels.layer("Hud").AbsoluteSize
-		if available.X <= 0 then available = Theme.viewport() - Vector2.new(0, 58) end
-		local narrow = available.X < 700
-		card.Size = UDim2.fromOffset(narrow and math.max(150, available.X - 194) or 270, narrow and 108 or 92)
-		card.Position = UDim2.new(1, -12, 0, available.Y < 440 and 126 or 70)
-		bodyL.TextSize = narrow and 17 or 20
-		bodyL.Size = UDim2.new(1, -24, 0, narrow and 58 or 42)
+local function build()
+	-- Lives inside the HUD's top cluster (already device-scaled), right under the cash pill.
+	local layer = Panels.layer("Hud")
+	local top = layer:FindFirstChild("Top")
+	local banner = Theme.make("Frame", {
+		Name = "Tutorial",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 108),
+		Size = UDim2.fromOffset(470, 66),
+		BackgroundColor3 = C.yellow,
+		Corner = 18,
+		Stroke = { Color = C.ink, Thickness = 4 },
+		Visible = false,
+		Parent = top or layer,
+	})
+	if not top then
+		Theme.autoScale(banner)
 	end
-	Panels.onViewportChanged(resize)
-	Panels.layer("Hud"):GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
-	Panels.Changed:Connect(function()
-		if card and card.Parent then card.Visible = not Panels.isOpen() end
-	end)
-	resize()
+	ui.banner = banner
+	ui.text = Theme.text({ Text = "", Size = UDim2.new(1, -70, 1, 0), Position = UDim2.fromOffset(60, 0), TextScaled = true, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.ink, TextStroke = false, Parent = banner })
+	ui.count = Theme.text({ Text = "1", Size = UDim2.fromOffset(46, 46), Position = UDim2.fromOffset(10, 10), BackgroundColor3 = C.orange, BackgroundTransparency = 0, Corner = 23, Stroke = { Color = C.ink, Thickness = 3 }, TextSize = 28, Parent = banner })
+	Theme.pulse(banner, 0.03)
 end
 
-local function targetAtt(step)
-	local function pp(machine)
-		local m = Common.myMachine(machine)
-		return m and m:FindFirstChild("PromptPoint", true)
-	end
-	if step <= 3 then
-		return pp("Anvil")
-	elseif step == 5 then
-		return pp("Smelter")
-	elseif step == 6 then
-		return pp("Extractor")
-	elseif step == 7 then
-		local hub = Common.hub()
-		local hatch = hub and hub:FindFirstChild("Hatchery")
-		if hatch then
-			for _, m in hatch:GetChildren() do
-				if m:GetAttribute("EggId") then
-					local a = m:FindFirstChild("PromptPoint", true)
-					if a then
-						return a
-					end
-				end
-			end
-			return hatch:FindFirstChildWhichIsA("BasePart")
+-- Trail + arrow toward the current target.
+local trail = { beam = nil, a0 = nil, a1 = nil, arrow = nil, target = nil }
+
+local function clearTrail()
+	for _, key in { "beam", "a0", "a1", "arrow" } do
+		if trail[key] then
+			trail[key]:Destroy()
+			trail[key] = nil
 		end
 	end
-	return nil
+	trail.target = nil
 end
 
-local function clearGuide()
-	if beam then
-		beam:Destroy()
-		beam = nil
-	end
-	if a0 then
-		a0:Destroy()
-		a0 = nil
-	end
-	if marker then
-		marker:Destroy()
-		marker = nil
-	end
-	lastTarget = nil
-end
-
-local function updateGuide(step)
-	local target = targetAtt(step)
-	local char = Common.player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not target or not hrp then
-		clearGuide()
+local function pointAt(target: Instance?)
+	if trail.target == target and trail.beam and trail.beam.Parent then
 		return
 	end
-	if a0 and a0.Parent ~= hrp then
-		clearGuide()
+	clearTrail()
+	local char = Players.LocalPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not target or not root or not target:IsA("BasePart") then
+		return
 	end
-	if lastTarget ~= target then
-		clearGuide()
-	end
-	if not a0 then
-		a0 = Instance.new("Attachment")
-		a0.Name = "OnboardingStart"
-		a0.Parent = hrp
-	end
-	if not marker then
-		marker = Instance.new("BillboardGui")
-		marker.Adornee = target
-		marker.Size = UDim2.fromOffset(120, 40)
-		marker.StudsOffset = Vector3.new(0, 4, 0)
-		marker.AlwaysOnTop = true
-		marker.MaxDistance = 1000
-		local l = Instance.new("TextLabel")
-		l.Size = UDim2.fromScale(1, 1)
-		l.BackgroundTransparency = 1
-		l.Font = Enum.Font.FredokaOne
-		l.TextSize = 30
-		l.TextColor3 = Color3.fromRGB(255, 190, 70)
-		l.TextStrokeTransparency = 0.3
-		l.Text = "▼ HERE"
-		l.Parent = marker
-		marker.Parent = Common.player.PlayerGui
-		lastTarget = target
-	end
-	local wantBeam = Common.vfx() and (hrp.Position - target.WorldPosition).Magnitude > 14
-	if wantBeam and not beam then
-		beam = Instance.new("Beam")
-		beam.Attachment0 = a0
-		beam.Attachment1 = target
-		beam.Color = ColorSequence.new(Color3.fromRGB(255, 190, 70))
-		beam.LightEmission = 1
-		beam.Width0 = 0.5
-		beam.Width1 = 0.5
-		beam.FaceCamera = true
-		beam.Transparency = NumberSequence.new(0.35)
-		beam.Parent = a0
-	elseif not wantBeam and beam then
-		beam:Destroy()
-		beam = nil
-	end
+	trail.target = target
+	local a0 = Instance.new("Attachment")
+	a0.Name = "TutorialFrom"
+	a0.Position = Vector3.new(0, -2, 0)
+	a0.Parent = root
+	local a1 = Instance.new("Attachment")
+	a1.Name = "TutorialTo"
+	a1.Position = Vector3.new(0, target.Size.Y / 2 + 1, 0)
+	a1.Parent = target
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.Color = ColorSequence.new(C.yellow, C.orange)
+	beam.LightEmission = 0.6
+	beam.Width0 = 1.4
+	beam.Width1 = 1.4
+	beam.FaceCamera = true
+	beam.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	beam.TextureMode = Enum.TextureMode.Static
+	beam.TextureLength = 3
+	beam.TextureSpeed = 2
+	beam.Transparency = NumberSequence.new(0.2)
+	beam.Parent = root
+	local arrow = Instance.new("BillboardGui")
+	arrow.Name = "TutorialArrow"
+	arrow.Adornee = target
+	arrow.Size = UDim2.fromOffset(110, 110)
+	arrow.StudsOffset = Vector3.new(0, 9, 0)
+	arrow.AlwaysOnTop = true
+	arrow.MaxDistance = 400
+	local label = Theme.text({ Text = "⬇", Size = UDim2.new(1, 0, 1, 0), TextSize = 96, TextColor3 = C.yellow, Parent = arrow })
+	label.Name = "Arrow"
+	arrow.Parent = Common.player:WaitForChild("PlayerGui")
+	trail.beam, trail.a0, trail.a1, trail.arrow = beam, a0, a1, arrow
 end
 
-local function stepDone(step, p)
-	if step == 1 then
-		local att = targetAtt(1)
-		local char = Common.player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		return att and hrp and (hrp.Position - att.WorldPosition).Magnitude <= 22
-	elseif step == 2 then
-		return forgeStarted or p.pending ~= nil or (p.weaponsForged or 0) >= 1
-	elseif step == 3 then
-		return p.pending ~= nil or (p.weaponsForged or 0) >= 1
-	elseif step == 4 then
-		return (p.weaponsForged or 0) >= 1 and p.pending == nil
-	elseif step == 5 then
-		return Common.sumLevels(p) >= 1
-	elseif step == 6 then
-		return (p.unlockedTier or 1) >= 2
-	elseif step == 7 then
-		return p.pets ~= nil and #p.pets >= 1
+local function currentStep(p: any): number
+	local s = math.max(step, p.tutorial or 0)
+	while s < #STEPS and STEPS[s + 1].done(p) do
+		s += 1
 	end
-	return false
+	return s
 end
 
-local function tick()
+local function update()
 	local p = State.profile
 	if not p or finished then
 		return
 	end
-	if not gui then
-		buildGui()
+	local s = currentStep(p)
+	if s > step then
+		step = s
+		Net.call("TutorialStep", s)
+		if s >= #STEPS then
+			finished = true
+			ui.banner.Visible = false
+			clearTrail()
+			Toast.show("You're a real blacksmith! Tip: LOCK your forge to stop thieves", "good")
+			return
+		end
+		Theme.pop(ui.banner, 0.8)
 	end
-	if (p.tutorial or 0) >= TOTAL then
-		-- already complete
+	local def = STEPS[step + 1]
+	if not def then
 		finished = true
-		clearGuide()
-		gui:Destroy()
+		ui.banner.Visible = false
+		clearTrail()
 		return
 	end
-	local done = math.max(p.tutorial or 0, localDone)
-	while done < TOTAL and stepDone(done + 1, p) do
-		done += 1
+	local busy = Panels.isOpen() or Reveal.isOpen()
+	ui.banner.Visible = not busy
+	ui.text.Text = def.text
+	ui.count.Text = tostring(step + 1)
+	if busy then
+		clearTrail()
+	else
+		local ok, target = pcall(def.target)
+		pointAt(ok and target or nil)
 	end
-	localDone = done
-	if done > reported and done > (p.tutorial or 0) then
-		reported = done
-		task.spawn(Net.call, "TutorialStep", done)
-	end
-	if done >= TOTAL then
-		finished = true
-		clearGuide()
-		titleL.Text = "TUTORIAL COMPLETE"
-		bodyL.Text = "You're a blacksmith now. Go forth and forge!"
-		barFill.Size = UDim2.fromScale(1, 1)
-		task.delay(4, function()
-			gui:Destroy()
-		end)
-		return
-	end
-	local step = done + 1
-	titleL.Text = ("OBJECTIVE  %d / %d"):format(step, TOTAL)
-	bodyL.Text = TEXT[step]
-	barFill.Size = UDim2.fromScale(done / TOTAL, 1)
-	updateGuide(step)
+end
+
+function WorldOnboarding.init()
+	build()
 end
 
 function WorldOnboarding.start()
-	Net.on("ForgePhase", function(p)
-		if type(p) == "table" and p.phase == "heat" then
-			forgeStarted = true
+	local t = 0
+	RunService.Heartbeat:Connect(function(dt)
+		t += dt
+		if trail.arrow then
+			trail.arrow.StudsOffset = Vector3.new(0, 9 + math.sin(t * 4) * 1.2, 0)
 		end
 	end)
-	task.spawn(function()
-		local ui = Common.Client:WaitForChild("UI", 10)
-		local mod = ui and ui:WaitForChild("ForgeSignals", 10)
-		local ok, Signals = pcall(require, mod)
-		if ok and type(Signals) == "table" and Signals.Started then
-			Signals.Started.Event:Connect(function()
-				forgeStarted = true
-			end)
-		end
+	Players.LocalPlayer.CharacterAdded:Connect(function()
+		clearTrail()
 	end)
 	while true do
-		local ok, err = pcall(tick)
+		local ok, err = pcall(update)
 		if not ok then
-			warn("[WorldOnboarding]", err)
-		end
-		if finished then
-			break
+			warn("[Onboarding]", err)
 		end
 		task.wait(0.4)
 	end

@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Companion eggs. Status: PROPOSED FOR PROTOTYPE.
+	Companion eggs. Status: v2 economy (docs/22).
 
 	Eggs are bought with earned Coins only; there are no paid random eggs here (docs/07
 	requires a policy review before any paid egg ships). Opening one egg per action is free
@@ -15,6 +15,7 @@
 ]]
 
 local Companions = require(script.Parent.Companions)
+local Materials = require(script.Parent.Materials)
 
 export type Entry = { kind: string, weight: number }
 export type Egg = {
@@ -42,52 +43,64 @@ end
 
 local rgb = Color3.fromRGB
 
+-- Egg prices follow the v2 curve: a fraction of the unlock price of the material after the
+-- one that opens the egg, so every egg is a meaningful but affordable buy when it appears.
+local EGG_PRICE_FACTOR = 0.2
+local function priced(tier: number): number
+	local cost = Materials[math.min(#Materials, tier + 1)].unlockCost * EGG_PRICE_FACTOR
+	if cost < 1000 then
+		return math.floor(cost + 0.5)
+	end
+	local magnitude = 10 ^ (math.floor(math.log10(cost)) - 2)
+	return math.floor(cost / magnitude + 0.5) * magnitude
+end
+
 local list: { Egg } = {
 	{
 		id = "hearth",
 		name = "Hearth Egg",
-		coinCost = 1_200,
-		unlockTier = 3,
+		coinCost = priced(2),
+		unlockTier = 2,
 		color = rgb(200, 120, 70),
 		kinds = entries({ "soot_mole", "bellows_bat", "clockwork_helper", "crate_mimic", "ore_golem" }),
 	},
 	{
 		id = "ember",
 		name = "Ember Egg",
-		coinCost = 60_000,
-		unlockTier = 8,
+		coinCost = priced(6),
+		unlockTier = 6,
 		color = rgb(255, 110, 40),
 		kinds = entries({ "cinder_mole", "ember_sprite", "gearwing_bat", "vault_mimic", "magma_salamander" }),
 	},
 	{
 		id = "rune",
 		name = "Rune Egg",
-		coinCost = 3_000_000,
-		unlockTier = 14,
+		coinCost = priced(11),
+		unlockTier = 11,
 		color = rgb(80, 200, 210),
 		kinds = entries({ "rune_mole", "glyph_clockwork", "moonlit_sprite", "mithril_golem", "runic_salamander" }),
 	},
 	{
 		id = "storm",
 		name = "Storm Egg",
-		coinCost = 90_000_000,
-		unlockTier = 19,
+		coinCost = priced(17),
+		unlockTier = 17,
 		color = rgb(110, 130, 255),
 		kinds = entries({ "frost_mimic", "storm_bat", "thunder_mole", "obsidian_clockwork", "tempest_golem" }),
 	},
 	{
 		id = "astral",
 		name = "Astral Egg",
-		coinCost = 5_000_000_000,
-		unlockTier = 25,
+		coinCost = priced(23),
+		unlockTier = 23,
 		color = rgb(150, 110, 255),
 		kinds = entries({ "sunlit_sprite", "lunar_mimic", "astral_salamander", "void_mole", "starforged_golem" }),
 	},
 	{
 		id = "primordial",
 		name = "Primordial Egg",
-		coinCost = 200_000_000_000,
-		unlockTier = 30,
+		coinCost = priced(28),
+		unlockTier = 28,
 		color = rgb(255, 240, 200),
 		kinds = entries({ "nebula_bat", "chrono_clockwork", "aether_mimic", "primordial_sprite", "primordial_wyrm" }),
 	},
