@@ -1,5 +1,8 @@
 # v2 verification (owner playtest remediation)
 
+> **Superseded counts:** the review remediation in [docs/25](25_REVIEW_REMEDIATION.md) is the current verification record. Lune is at 238/0 and Studio specs at 229/0. The two-client acceptance now has 20 checks, including real-client steal prompts. A real-DataStore steal-recovery test was added. The figures below are the original v2 evidence.
+
+
 Recorded October 8, 2026 in the live Studio place (place `80574227639803`) and with Lune. All Studio saves used the isolated `ForgeFrenzy_Player_v2_StudioPlaytest` store; production data was untouched. No purchases, paid generation or publishing were performed.
 
 ## World preservation
